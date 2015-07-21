@@ -17,6 +17,7 @@
 """A PHP devappserver2 runtime."""
 
 
+
 import base64
 import cStringIO
 import httplib
@@ -30,6 +31,7 @@ import urllib
 import google
 
 from google.appengine.api import appinfo
+from google.appengine.tools.devappserver2 import environ_utils
 from google.appengine.tools.devappserver2 import http_runtime_constants
 from google.appengine.tools.devappserver2 import php
 from google.appengine.tools.devappserver2 import request_rewriter
@@ -38,7 +40,18 @@ from google.appengine.tools.devappserver2 import safe_subprocess
 from google.appengine.tools.devappserver2 import wsgi_server
 
 SDK_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), 'php/sdk'))
+
+
+
+
+
+
+
+os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), 'php/sdk'))
+
+
+
+
 
 
 if not os.path.exists(SDK_PATH):
@@ -75,23 +88,17 @@ class PHPRuntime(object):
         'REMOTE_API_HOST': str(config.api_host),
         'REMOTE_API_PORT': str(config.api_port),
         'SERVER_SOFTWARE': http_runtime_constants.SERVER_SOFTWARE,
+        'STDERR_LOG_LEVEL': str(config.stderr_log_level),
         'TZ': 'UTC',
         }
     self.environ_template.update((env.key, env.value) for env in config.environ)
 
-  def __call__(self, environ, start_response):
-    """Handles an HTTP request for the runtime using a PHP executable.
+  def make_php_cgi_environ(self, environ):
+    """Returns a dict of environ for php-cgi based off the wsgi environ."""
 
-    Args:
-      environ: An environ dict for the request as defined in PEP-333.
-      start_response: A function with semantics defined in PEP-333.
-
-    Returns:
-      An iterable over strings containing the body of the HTTP response.
-    """
     user_environ = self.environ_template.copy()
 
-    self.copy_headers(environ, user_environ)
+    environ_utils.propagate_environs(environ, user_environ)
     user_environ['REQUEST_METHOD'] = environ.get('REQUEST_METHOD', 'GET')
     user_environ['PATH_INFO'] = environ['PATH_INFO']
     user_environ['QUERY_STRING'] = environ['QUERY_STRING']
@@ -108,7 +115,7 @@ class PHPRuntime(object):
     # PHP environment. Put the user script in REAL_SCRIPT_FILENAME.
     user_environ['REAL_SCRIPT_FILENAME'] = os.path.normpath(
         os.path.join(self.config.application_root,
-                     environ[http_runtime_constants.SCRIPT_HEADER]))
+                     environ[http_runtime_constants.SCRIPT_HEADER].lstrip('/')))
     user_environ['SCRIPT_FILENAME'] = SETUP_PHP_PATH
     user_environ['REMOTE_REQUEST_ID'] = environ[
         http_runtime_constants.REQUEST_ID_ENVIRON]
@@ -124,17 +131,29 @@ class PHPRuntime(object):
     if 'CONTENT_LENGTH' in environ:
       user_environ['CONTENT_LENGTH'] = environ['CONTENT_LENGTH']
       user_environ['HTTP_CONTENT_LENGTH'] = environ['CONTENT_LENGTH']
-      content = environ['wsgi.input'].read(int(environ['CONTENT_LENGTH']))
-    else:
-      content = ''
 
     # On Windows, in order to run a side-by-side assembly the specified env
     # must include a valid SystemRoot.
     if 'SYSTEMROOT' in os.environ:
       user_environ['SYSTEMROOT'] = os.environ['SYSTEMROOT']
 
+    # On Windows, TMP & TEMP environmental variables are used by GetTempPath
+    # http://msdn.microsoft.com/library/windows/desktop/aa364992(v=vs.85).aspx
+    if 'TMP' in os.environ:
+      user_environ['TMP'] = os.environ['TMP']
+    if 'TEMP' in os.environ:
+      user_environ['TEMP'] = os.environ['TEMP']
+
+    if self.config.php_config.enable_debugger:
+      user_environ['XDEBUG_CONFIG'] = environ.get('XDEBUG_CONFIG', '')
+
+    return user_environ
+
+  def make_php_cgi_args(self):
+    """Returns an array of args for php-cgi based on self.config."""
+
     # See http://www.php.net/manual/en/ini.core.php#ini.include-path.
-    include_paths = [self.config.application_root, SDK_PATH]
+    include_paths = ['.', self.config.application_root, SDK_PATH]
     if sys.platform == 'win32':
       # See https://bugs.php.net/bug.php?id=46034 for quoting requirements.
       include_path = 'include_path="%s"' % ';'.join(include_paths)
@@ -143,23 +162,60 @@ class PHPRuntime(object):
 
     args = [self.config.php_config.php_executable_path, '-d', include_path]
 
-    if self.config.php_config.enable_debugger:
-      args.extend(['-d', 'xdebug.remote_enable="1"'])
-      user_environ['XDEBUG_CONFIG'] = os.environ.get('XDEBUG_CONFIG', '')
+    # Load php.ini from application's root.
+    args.extend(['-c', self.config.application_root])
 
+    if self.config.php_config.enable_debugger:
+      args.extend(['-d', 'xdebug.default_enable="1"'])
+      args.extend(['-d', 'xdebug.overload_var_dump="1"'])
+      args.extend(['-d', 'xdebug.remote_enable="1"'])
+
+    if self.config.php_config.xdebug_extension_path:
+      args.extend(['-d', 'zend_extension="%s"' %
+                   self.config.php_config.xdebug_extension_path])
+
+    if self.config.php_config.gae_extension_path:
+      args.extend(['-d', 'extension="%s"' % os.path.basename(
+          self.config.php_config.gae_extension_path)])
+      args.extend(['-d', 'extension_dir="%s"' % os.path.dirname(
+          self.config.php_config.gae_extension_path)])
+
+    return args
+
+  def __call__(self, environ, start_response):
+    """Handles an HTTP request for the runtime using a PHP executable.
+
+    Args:
+      environ: An environ dict for the request as defined in PEP-333.
+      start_response: A function with semantics defined in PEP-333.
+
+    Returns:
+      An iterable over strings containing the body of the HTTP response.
+    """
+    user_environ = self.make_php_cgi_environ(environ)
+
+    if 'CONTENT_LENGTH' in environ:
+      content = environ['wsgi.input'].read(int(environ['CONTENT_LENGTH']))
+    else:
+      content = ''
+
+    args = self.make_php_cgi_args()
+
+    # Handles interactive request.
     request_type = environ.pop(http_runtime_constants.REQUEST_TYPE_HEADER, None)
     if request_type == 'interactive':
       args.extend(['-d', 'html_errors="0"'])
       user_environ[http_runtime_constants.REQUEST_TYPE_HEADER] = request_type
 
     try:
+      # stderr is not captured here so that it propagates to the parent process
+      # and gets printed out to consle.
       p = safe_subprocess.start_process(args,
                                         input_string=content,
                                         env=user_environ,
                                         cwd=self.config.application_root,
-                                        stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE)
-      stdout, stderr = p.communicate()
+                                        stdout=subprocess.PIPE)
+      stdout, _ = p.communicate()
     except Exception as e:
       logging.exception('Failure to start PHP with: %s', args)
       start_response('500 Internal Server Error',
@@ -172,8 +228,8 @@ class PHPRuntime(object):
         message = httplib.HTTPMessage(cStringIO.StringIO(stdout))
         return [message.fp.read()]
       else:
-        logging.error('php failure (%r) with:\nstdout:\n%sstderr:\n%s',
-                      p.returncode, stdout, stderr)
+        logging.error('php failure (%r) with:\nstdout:\n%s',
+                      p.returncode, stdout)
         start_response('500 Internal Server Error',
                        [(http_runtime_constants.ERROR_CODE_HEADER, '1')])
         message = httplib.HTTPMessage(cStringIO.StringIO(stdout))
@@ -196,29 +252,6 @@ class PHPRuntime(object):
 
     start_response(status, headers)
     return [message.fp.read()]
-
-  def copy_headers(self, source_environ, dest_environ):
-    """Copy headers from source_environ to dest_environ.
-
-    This extracts headers that represent environ values and propagates all
-    other headers which are not used for internal implementation details or
-    headers that are stripped.
-
-    Args:
-      source_environ: The source environ dict.
-      dest_environ: The environ dict to populate.
-    """
-    # TODO: This method is copied from python/runtime.py. If this
-    # method isn't obsoleted, consider moving it to some sort of utility module.
-    for env in http_runtime_constants.ENVIRONS_TO_PROPAGATE:
-      value = source_environ.get(
-          http_runtime_constants.INTERNAL_ENVIRON_PREFIX + env, None)
-      if value is not None:
-        dest_environ[env] = value
-    for name, value in source_environ.items():
-      if (name.startswith('HTTP_') and
-          not name.startswith(http_runtime_constants.INTERNAL_ENVIRON_PREFIX)):
-        dest_environ[name] = value
 
 
 def main():

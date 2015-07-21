@@ -51,6 +51,7 @@ from antlr3.compat import set, frozenset
 
 
 
+
 allOrdinals = set([1, 2, 3, 4, 5])
 numOrdinals = len(allOrdinals)
 
@@ -89,8 +90,8 @@ EVERY=6
 FEBRUARY=29
 MONDAY=20
 SUNDAY=26
-JUNE=33
 TWO_DIGIT_HOUR_TIME=43
+JUNE=33
 OF=4
 JANUARY=28
 MINUTES=18

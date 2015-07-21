@@ -20,6 +20,7 @@
 namespace dummy {
   require_once 'google/appengine/runtime/proto/ProtocolMessage.php';
   require_once 'google/appengine/api/api_base_pb.php';
+  require_once 'google/appengine/api/source_pb.php';
 }
 namespace google\appengine\LogServiceError {
   class ErrorCode {
@@ -127,10 +128,33 @@ namespace google\appengine {
     public function hasMessage() {
       return isset($this->message);
     }
+    public function getSourceLocation() {
+      if (!isset($this->source_location)) {
+        return new \google\appengine\SourceLocation();
+      }
+      return $this->source_location;
+    }
+    public function mutableSourceLocation() {
+      if (!isset($this->source_location)) {
+        $res = new \google\appengine\SourceLocation();
+        $this->source_location = $res;
+        return $res;
+      }
+      return $this->source_location;
+    }
+    public function clearSourceLocation() {
+      if (isset($this->source_location)) {
+        unset($this->source_location);
+      }
+    }
+    public function hasSourceLocation() {
+      return isset($this->source_location);
+    }
     public function clear() {
       $this->clearTimestampUsec();
       $this->clearLevel();
       $this->clearMessage();
+      $this->clearSourceLocation();
     }
     public function byteSizePartial() {
       $res = 0;
@@ -146,6 +170,10 @@ namespace google\appengine {
         $res += 1;
         $res += $this->lengthString(strlen($this->message));
       }
+      if (isset($this->source_location)) {
+        $res += 1;
+        $res += $this->lengthString($this->source_location->byteSizePartial());
+      }
       return $res;
     }
     public function outputPartial($out) {
@@ -160,6 +188,11 @@ namespace google\appengine {
       if (isset($this->message)) {
         $out->putVarInt32(26);
         $out->putPrefixedString($this->message);
+      }
+      if (isset($this->source_location)) {
+        $out->putVarInt32(34);
+        $out->putVarInt32($this->source_location->byteSizePartial());
+        $this->source_location->outputPartial($out);
       }
     }
     public function tryMerge($d) {
@@ -177,6 +210,12 @@ namespace google\appengine {
             $this->setMessage(substr($d->buffer(), $d->pos(), $length));
             $d->skip($length);
             break;
+          case 34:
+            $length = $d->getVarInt32();
+            $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
+            $d->skip($length);
+            $this->mutableSourceLocation()->tryMerge($tmp);
+            break;
           case 0:
             throw new \google\net\ProtocolBufferDecodeError();
             break;
@@ -189,6 +228,7 @@ namespace google\appengine {
       if (!isset($this->timestamp_usec)) return 'timestamp_usec';
       if (!isset($this->level)) return 'level';
       if (!isset($this->message)) return 'message';
+      if (isset($this->source_location) && (!$this->source_location->isInitialized())) return 'source_location';
       return null;
     }
     public function mergeFrom($x) {
@@ -202,6 +242,9 @@ namespace google\appengine {
       if ($x->hasMessage()) {
         $this->setMessage($x->getMessage());
       }
+      if ($x->hasSourceLocation()) {
+        $this->mutableSourceLocation()->mergeFrom($x->getSourceLocation());
+      }
     }
     public function equals($x) {
       if ($x === $this) { return true; }
@@ -211,6 +254,8 @@ namespace google\appengine {
       if (isset($this->level) && !$this->integerEquals($this->level, $x->level)) return false;
       if (isset($this->message) !== isset($x->message)) return false;
       if (isset($this->message) && $this->message !== $x->message) return false;
+      if (isset($this->source_location) !== isset($x->source_location)) return false;
+      if (isset($this->source_location) && !$this->source_location->equals($x->source_location)) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
@@ -223,6 +268,9 @@ namespace google\appengine {
       }
       if (isset($this->message)) {
         $res .= $prefix . "message: " . $this->debugFormatString($this->message) . "\n";
+      }
+      if (isset($this->source_location)) {
+        $res .= $prefix . "source_location <\n" . $this->source_location->shortDebugString($prefix . "  ") . $prefix . ">\n";
       }
       return $res;
     }
@@ -618,10 +666,33 @@ namespace google\appengine {
     public function hasLogMessage() {
       return isset($this->log_message);
     }
+    public function getSourceLocation() {
+      if (!isset($this->source_location)) {
+        return new \google\appengine\SourceLocation();
+      }
+      return $this->source_location;
+    }
+    public function mutableSourceLocation() {
+      if (!isset($this->source_location)) {
+        $res = new \google\appengine\SourceLocation();
+        $this->source_location = $res;
+        return $res;
+      }
+      return $this->source_location;
+    }
+    public function clearSourceLocation() {
+      if (isset($this->source_location)) {
+        unset($this->source_location);
+      }
+    }
+    public function hasSourceLocation() {
+      return isset($this->source_location);
+    }
     public function clear() {
       $this->clearTime();
       $this->clearLevel();
       $this->clearLogMessage();
+      $this->clearSourceLocation();
     }
     public function byteSizePartial() {
       $res = 0;
@@ -637,6 +708,10 @@ namespace google\appengine {
         $res += 1;
         $res += $this->lengthString(strlen($this->log_message));
       }
+      if (isset($this->source_location)) {
+        $res += 1;
+        $res += $this->lengthString($this->source_location->byteSizePartial());
+      }
       return $res;
     }
     public function outputPartial($out) {
@@ -651,6 +726,11 @@ namespace google\appengine {
       if (isset($this->log_message)) {
         $out->putVarInt32(26);
         $out->putPrefixedString($this->log_message);
+      }
+      if (isset($this->source_location)) {
+        $out->putVarInt32(34);
+        $out->putVarInt32($this->source_location->byteSizePartial());
+        $this->source_location->outputPartial($out);
       }
     }
     public function tryMerge($d) {
@@ -668,6 +748,12 @@ namespace google\appengine {
             $this->setLogMessage(substr($d->buffer(), $d->pos(), $length));
             $d->skip($length);
             break;
+          case 34:
+            $length = $d->getVarInt32();
+            $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
+            $d->skip($length);
+            $this->mutableSourceLocation()->tryMerge($tmp);
+            break;
           case 0:
             throw new \google\net\ProtocolBufferDecodeError();
             break;
@@ -680,6 +766,7 @@ namespace google\appengine {
       if (!isset($this->time)) return 'time';
       if (!isset($this->level)) return 'level';
       if (!isset($this->log_message)) return 'log_message';
+      if (isset($this->source_location) && (!$this->source_location->isInitialized())) return 'source_location';
       return null;
     }
     public function mergeFrom($x) {
@@ -693,6 +780,9 @@ namespace google\appengine {
       if ($x->hasLogMessage()) {
         $this->setLogMessage($x->getLogMessage());
       }
+      if ($x->hasSourceLocation()) {
+        $this->mutableSourceLocation()->mergeFrom($x->getSourceLocation());
+      }
     }
     public function equals($x) {
       if ($x === $this) { return true; }
@@ -702,6 +792,8 @@ namespace google\appengine {
       if (isset($this->level) && !$this->integerEquals($this->level, $x->level)) return false;
       if (isset($this->log_message) !== isset($x->log_message)) return false;
       if (isset($this->log_message) && $this->log_message !== $x->log_message) return false;
+      if (isset($this->source_location) !== isset($x->source_location)) return false;
+      if (isset($this->source_location) && !$this->source_location->equals($x->source_location)) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
@@ -714,6 +806,9 @@ namespace google\appengine {
       }
       if (isset($this->log_message)) {
         $res .= $prefix . "log_message: " . $this->debugFormatString($this->log_message) . "\n";
+      }
+      if (isset($this->source_location)) {
+        $res .= $prefix . "source_location <\n" . $this->source_location->shortDebugString($prefix . "  ") . $prefix . ">\n";
       }
       return $res;
     }
@@ -1419,6 +1514,23 @@ namespace google\appengine {
     public function hasAppEngineRelease() {
       return isset($this->app_engine_release);
     }
+    public function getTraceId() {
+      if (!isset($this->trace_id)) {
+        return '';
+      }
+      return $this->trace_id;
+    }
+    public function setTraceId($val) {
+      $this->trace_id = $val;
+      return $this;
+    }
+    public function clearTraceId() {
+      unset($this->trace_id);
+      return $this;
+    }
+    public function hasTraceId() {
+      return isset($this->trace_id);
+    }
     public function clear() {
       $this->clearAppId();
       $this->clearVersionId();
@@ -1458,6 +1570,7 @@ namespace google\appengine {
       $this->clearLinesIncomplete();
       $this->clearModuleId();
       $this->clearAppEngineRelease();
+      $this->clearTraceId();
     }
     public function byteSizePartial() {
       $res = 0;
@@ -1607,6 +1720,10 @@ namespace google\appengine {
       if (isset($this->app_engine_release)) {
         $res += 2;
         $res += $this->lengthString(strlen($this->app_engine_release));
+      }
+      if (isset($this->trace_id)) {
+        $res += 2;
+        $res += $this->lengthString(strlen($this->trace_id));
       }
       return $res;
     }
@@ -1765,6 +1882,10 @@ namespace google\appengine {
       if (isset($this->app_engine_release)) {
         $out->putVarInt32(306);
         $out->putPrefixedString($this->app_engine_release);
+      }
+      if (isset($this->trace_id)) {
+        $out->putVarInt32(314);
+        $out->putPrefixedString($this->trace_id);
       }
     }
     public function tryMerge($d) {
@@ -1929,6 +2050,11 @@ namespace google\appengine {
             $this->setAppEngineRelease(substr($d->buffer(), $d->pos(), $length));
             $d->skip($length);
             break;
+          case 314:
+            $length = $d->getVarInt32();
+            $this->setTraceId(substr($d->buffer(), $d->pos(), $length));
+            $d->skip($length);
+            break;
           case 0:
             throw new \google\net\ProtocolBufferDecodeError();
             break;
@@ -2075,6 +2201,9 @@ namespace google\appengine {
       if ($x->hasAppEngineRelease()) {
         $this->setAppEngineRelease($x->getAppEngineRelease());
       }
+      if ($x->hasTraceId()) {
+        $this->setTraceId($x->getTraceId());
+      }
     }
     public function equals($x) {
       if ($x === $this) { return true; }
@@ -2156,6 +2285,8 @@ namespace google\appengine {
       if (isset($this->module_id) && $this->module_id !== $x->module_id) return false;
       if (isset($this->app_engine_release) !== isset($x->app_engine_release)) return false;
       if (isset($this->app_engine_release) && $this->app_engine_release !== $x->app_engine_release) return false;
+      if (isset($this->trace_id) !== isset($x->trace_id)) return false;
+      if (isset($this->trace_id) && $this->trace_id !== $x->trace_id) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
@@ -2273,6 +2404,9 @@ namespace google\appengine {
       }
       if (isset($this->app_engine_release)) {
         $res .= $prefix . "app_engine_release: " . $this->debugFormatString($this->app_engine_release) . "\n";
+      }
+      if (isset($this->trace_id)) {
+        $res .= $prefix . "trace_id: " . $this->debugFormatString($this->trace_id) . "\n";
       }
       return $res;
     }

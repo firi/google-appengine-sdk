@@ -101,6 +101,9 @@ self.setup_env().
 
 
 
+
+
+
 import os
 import unittest
 
@@ -142,7 +145,10 @@ try:
   from google.appengine.datastore import datastore_sqlite_stub
 except ImportError:
   datastore_sqlite_stub = None
+from google.appengine.datastore import cloud_datastore_v1_stub
+from google.appengine.datastore import datastore_pbs
 from google.appengine.datastore import datastore_stub_util
+from google.appengine.datastore import datastore_v4_stub
 from google.appengine.ext.cloudstorage import common as gcs_common
 from google.appengine.ext.cloudstorage import stub_dispatcher as gcs_dispatcher
 
@@ -509,6 +515,8 @@ class Testbed(object):
     """
     if not enable:
       self._disable_stub(DATASTORE_SERVICE_NAME)
+      self._disable_stub(datastore_v4_stub.SERVICE_NAME)
+      self._disable_stub(cloud_datastore_v1_stub.SERVICE_NAME)
       return
     if use_sqlite:
       if datastore_sqlite_stub is None:
@@ -530,6 +538,12 @@ class Testbed(object):
           **stub_kw_args)
     self._register_stub(DATASTORE_SERVICE_NAME, stub,
                         self._deactivate_datastore_v3_stub)
+    v4_stub = datastore_v4_stub.DatastoreV4Stub(os.environ['APPLICATION_ID'])
+    self._register_stub(datastore_v4_stub.SERVICE_NAME, v4_stub)
+    if datastore_pbs._CLOUD_DATASTORE_ENABLED:
+      cloud_stub = cloud_datastore_v1_stub.CloudDatastoreV1Stub(
+          os.environ['APPLICATION_ID'])
+      self._register_stub(cloud_datastore_v1_stub.SERVICE_NAME, cloud_stub)
 
   def _deactivate_datastore_v3_stub(self, stub):
     stub.Write()
@@ -548,7 +562,7 @@ class Testbed(object):
     stub = file_service_stub.FileServiceStub(self._get_blob_storage())
     self._register_stub(FILES_SERVICE_NAME, stub)
 
-  def init_images_stub(self, enable=True):
+  def init_images_stub(self, enable=True, **stub_kwargs):
     """Enable the images stub.
 
     The images service stub is only available in dev_appserver because
@@ -557,6 +571,7 @@ class Testbed(object):
     Args:
       enable: True, if the fake service should be enabled, False if real
               service should be disabled.
+      stub_kwargs: Keyword arguments passed on to the service stub.
     """
     if not enable:
       self._disable_stub(IMAGES_SERVICE_NAME)
@@ -565,7 +580,7 @@ class Testbed(object):
       msg = ('Could not initialize images API; you are likely '
              'missing the Python "PIL" module.')
       raise StubNotSupportedError(msg)
-    stub = images_stub.ImagesServiceStub()
+    stub = images_stub.ImagesServiceStub(**stub_kwargs)
     self._register_stub(IMAGES_SERVICE_NAME, stub)
 
   def init_logservice_stub(self, enable=True):

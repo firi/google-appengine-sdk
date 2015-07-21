@@ -299,7 +299,8 @@ class Memcached {
                             $offset = 1,
                             $initial_value = 0,
                             $expiration = 0) {
-    return $this->increment($key, -$offset, $initial_value, $expiration);
+    return $this->incrementInternal($key, $offset, $initial_value, $expiration,
+                                    false);
   }
 
   /**
@@ -319,7 +320,8 @@ class Memcached {
                                  $offset = 1,
                                  $initial_value = 0,
                                  $expiration = 0) {
-    return decrement($key, $offset, $initial_value, $expiration);
+    return $this->incrementInternal($key, $offset, $initial_value, $expiration,
+                                    false);
   }
 
   /**
@@ -497,8 +499,13 @@ class Memcached {
         $cas_token = $item->getCasId();
       }
       $this->result_code = self::RES_SUCCESS;
-      return MemcacheUtils::deserializeValue($item->getValue(),
-                                             $item->getFlags());
+      try {
+        return MemcacheUtils::deserializeValue($item->getValue(),
+                                               $item->getFlags());
+      } catch (\UnexpectedValueException $e) {
+        $this->result_code = self::RES_NOTFOUND;
+        return false;
+      }
     } else {
       $this->result_code = self::RES_NOTFOUND;
       return false;
@@ -625,8 +632,13 @@ class Memcached {
 
     $return_value = array();
     foreach ($response->getItemList() as $item) {
-      $return_value[$item->getKey()] = MemcacheUtils::deserializeValue(
-          $item->getValue(), $item->getFlags());
+      try {
+        $return_value[$item->getKey()] = MemcacheUtils::deserializeValue(
+            $item->getValue(), $item->getFlags());
+      } catch (\UnexpectedValueException $e) {
+        // Skip entries that cannot be deserialized.
+        continue;
+      }
       if ($item->hasCasId()) {
         $cas_tokens[$item->getKey()] = $item->getCasId();
       }
@@ -714,7 +726,7 @@ class Memcached {
         return "FAILURE";
       case self::RES_NOTSTORED:
         return "NOT STORED";
-      case self::RES_NOT_FOUND:
+      case self::RES_NOTFOUND:
         return "NOT FOUND";
     }
     return "UNKNOWN";
@@ -763,31 +775,8 @@ class Memcached {
                             $offset = 1,
                             $initial_value = 0,
                             $expiry = 0) {
-    // Sending of a key of 'null' or an unset value is a failure.
-    if (is_null($key)) {
-      return false;
-    }
-
-    $key = $this->getPrefixKey($key);
-    $request = new MemcacheIncrementRequest();
-    $response = new MemcacheIncrementResponse();
-    $request->setKey($key);
-    $request->setDelta($offset);
-    $request->setInitialValue($initial_value);
-
-    try {
-      ApiProxy::makeSyncCall('memcache', 'Increment', $request, $response);
-    } catch (Error $e) {
-      $this->result_code = self::RES_FAILURE;
-      return false;
-    }
-    if ($response->hasNewValue()) {
-      $this->result_code = self::RES_SUCCESS;
-      return $response->getNewValue();
-    } else {
-      $this->result_code = self::RES_NOTSTORED;
-      return false;
-    }
+      return $this->incrementInternal($key, $offset, $initial_value, $expiry,
+                                      true);
   }
 
   /**
@@ -806,7 +795,54 @@ class Memcached {
                                  $offset = 1,
                                  $initial_value = 0,
                                  $expiry = 0) {
-      return $this->increment($key, $offset, $initial_value, $expiry);
+      return $this->incrementInternal($key, $offset, $initial_value, $expiry,
+                                      true);
+  }
+
+  /**
+   * Internal implementation of increment (and decrement).
+   *
+   * @param string $key The key of the item to increment
+   * @param int $offset The amount by which to increment the item's value
+   * @param int $initial_value The value to set the item to if it doesn't exist.
+   * @param int $expiry The expiry time to set on the item.
+   * @param bool $is_incr Whether to perform an increment or decrement.
+   *
+   * @return The new item's value on success or false on failure.
+   */
+  private function incrementInternal($key,
+                                     $offset,
+                                     $initial_value,
+                                     $expiry,
+                                     $is_incr) {
+    // Sending of a key of 'null' or an unset value is a failure.
+    if (is_null($key)) {
+      return false;
+    }
+
+    $key = $this->getPrefixKey($key);
+    $request = new MemcacheIncrementRequest();
+    $response = new MemcacheIncrementResponse();
+    $request->setKey($key);
+    $request->setDelta($offset);
+    $request->setInitialValue($initial_value);
+    if (!$is_incr) {
+      $request->setDirection(MemcacheIncrementRequest\Direction::DECREMENT);
+    }
+
+    try {
+      ApiProxy::makeSyncCall('memcache', 'Increment', $request, $response);
+    } catch (Error $e) {
+      $this->result_code = self::RES_FAILURE;
+      return false;
+    }
+    if ($response->hasNewValue()) {
+      $this->result_code = self::RES_SUCCESS;
+      return $response->getNewValue();
+    } else {
+      $this->result_code = self::RES_NOTSTORED;
+      return false;
+    }
   }
 
   /**

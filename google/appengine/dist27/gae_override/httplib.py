@@ -5,6 +5,7 @@
 """Copyright 2008 Python Software Foundation, Ian Bicking, and Google."""
 
 import cStringIO
+import inspect
 import mimetools
 
 HTTP_PORT = 80
@@ -351,8 +352,10 @@ class HTTPConnection:
   _allow_truncated = True
   _follow_redirects = False
 
+  # pylint: disable=unused-argument
   def __init__(self, host, port=None, strict=None,
-               timeout=_GLOBAL_DEFAULT_TIMEOUT, source_address=None):
+               timeout=_GLOBAL_DEFAULT_TIMEOUT, source_address=None,
+               context=None):
     # net.proto.ProcotolBuffer relies on httplib so importing urlfetch at the
     # module level causes a failure on prod. That means the import needs to be
     # lazy.
@@ -458,6 +461,16 @@ class HTTPConnection:
       headers = headers.items()
     self.headers = headers
 
+  @staticmethod
+  def _getargspec(callable_object):
+    assert callable(callable_object)
+    try:
+      # Methods and lambdas.
+      return inspect.getargspec(callable_object)
+    except TypeError:
+      # Class instances with __call__.
+      return inspect.getargspec(callable_object.__call__)
+
   def getresponse(self, buffering=False):
     """Get the response from the server.
 
@@ -491,18 +504,31 @@ class HTTPConnection:
       raise ValueError('%r is an unrecognized HTTP method' % self._method)
 
     try:
+      # The Python Standard Library doesn't validate certificates so don't
+      # validate them here either.  But some libraries (httplib2, possibly
+      # others) use an alternate technique where the fetch function does not
+      # have a validate_certificate argument so only provide it when supported.
+      argspec = self._getargspec(self._fetch)
+      extra_kwargs = (
+          {'validate_certificate': False}
+          if argspec.keywords or 'validate_certificate' in argspec.args
+          else {})
       fetch_response = self._fetch(url,
                                    self._body,
                                    method, headers,
                                    self._allow_truncated,
                                    self._follow_redirects,
-                                   deadline)
+                                   deadline,
+                                   **extra_kwargs)
     except urlfetch.InvalidURLError, e:
       raise InvalidURL(str(e))
     except (urlfetch.ResponseTooLargeError, urlfetch.DeadlineExceededError), e:
       raise HTTPException(str(e))
     except urlfetch.SSLCertificateError, e:
       # Should be ssl.SSLError but the ssl module isn't available.
+      # Continue to support this exception for versions of _fetch that do not
+      # support validate_certificates. Also, in production App Engine defers
+      # specific semantics so leaving this in just in case.
       raise HTTPException(str(e))
     except urlfetch.DownloadError, e:
       # One of the following occured: UNSPECIFIED_ERROR, FETCH_ERROR
@@ -525,9 +551,10 @@ class HTTPSConnection(HTTPConnection):
   _protocol = 'https'  # passed to urlfetch.
   default_port = HTTPS_PORT
 
+  # pylint: disable=unused-argument
   def __init__(self, host, port=None, key_file=None, cert_file=None,
                strict=False, timeout=_GLOBAL_DEFAULT_TIMEOUT,
-               source_address=None):
+               source_address=None, context=None):
     if key_file is not None or cert_file is not None:
       raise NotImplementedError(
           'key_file and cert_file arguments are not implemented')

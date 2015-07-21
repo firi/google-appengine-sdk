@@ -19,6 +19,10 @@
 This format implements log file format from leveldb:
 http://leveldb.googlecode.com/svn/trunk/doc/log_format.txt
 
+The main advantages of this format are
+1. to detect corruption. Every record has a crc32c checksum.
+2. to quickly skip corrupted record to the next valid record.
+
 Full specification of format follows in case leveldb decides to change it.
 
 
@@ -88,6 +92,12 @@ import google
 from google.appengine.api.files import crc32c
 from google.appengine.ext.mapreduce import errors
 
+try:
+
+  import crcmod
+  _CRC_FUN = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
+except ImportError:
+  _CRC_FUN = None
 
 
 
@@ -143,6 +153,27 @@ def _unmask_crc(masked_crc):
   return ((rot >> 17) | (rot << 15)) & 0xFFFFFFFFL
 
 
+def _compute_native_crc(record_type, data):
+  """Computes crc using native crcmod library."""
+
+
+  return _CRC_FUN(chr(record_type) + data)
+
+
+def _compute_python_crc(record_type, data):
+  """Computes crc using naive python implementation."""
+  crc = crc32c.crc_update(crc32c.CRC_INIT, [record_type])
+  crc = crc32c.crc_update(crc, data)
+  return crc32c.crc_finalize(crc)
+
+
+def _compute_crc(record_type, data):
+  """Computes the crc using crcmod (native) if available, crc32c otherwise."""
+  if _CRC_FUN is None:
+    return  _compute_python_crc(record_type, data)
+  return _compute_native_crc(record_type, data)
+
+
 class RecordsWriter(object):
   """A writer for records format."""
 
@@ -159,10 +190,7 @@ class RecordsWriter(object):
   def __write_record(self, record_type, data):
     """Write single physical record."""
     length = len(data)
-
-    crc = crc32c.crc_update(crc32c.CRC_INIT, [record_type])
-    crc = crc32c.crc_update(crc, data)
-    crc = crc32c.crc_finalize(crc)
+    crc = _compute_crc(record_type, data)
 
     self.__writer.write(
         struct.pack(_HEADER_FORMAT, _mask_crc(crc), length, record_type))
@@ -268,9 +296,7 @@ class RecordsReader(object):
     if record_type == _RECORD_TYPE_NONE:
       return ('', record_type)
 
-    actual_crc = crc32c.crc_update(crc32c.CRC_INIT, [record_type])
-    actual_crc = crc32c.crc_update(actual_crc, data)
-    actual_crc = crc32c.crc_finalize(actual_crc)
+    actual_crc = _compute_crc(record_type, data)
 
     if actual_crc != crc:
       raise errors.InvalidRecordError('Data crc does not match')
@@ -286,7 +312,11 @@ class RecordsReader(object):
                        (len(data), pad_length))
 
   def read(self):
-    """Reads record from current position in reader."""
+    """Reads record from current position in reader.
+
+    Returns:
+      original bytes stored in a single record.
+    """
     data = None
     while True:
       last_offset = self.tell()

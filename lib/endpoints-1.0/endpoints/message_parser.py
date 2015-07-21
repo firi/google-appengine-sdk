@@ -23,6 +23,8 @@ Schema description of all the messages.
 """
 
 
+
+
 import re
 
 from protorpc import message_types
@@ -88,6 +90,8 @@ class MessageTypeToJsonSchema(object):
     """
     name = self.__normalized_name(message_type)
     if name not in self.__schemas:
+
+      self.__schemas[name] = None
       schema = self.__message_to_schema(message_type)
       self.__schemas[name] = schema
     return name

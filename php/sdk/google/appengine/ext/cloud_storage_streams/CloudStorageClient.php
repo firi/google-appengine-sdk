@@ -28,7 +28,9 @@ use google\appengine\api\cloud_storage\CloudStorageTools;
 use google\appengine\runtime\ApiProxy;
 use google\appengine\runtime\ApplicationError;
 use google\appengine\URLFetchRequest\RequestMethod;
+use google\appengine\URLFetchServiceError\ErrorCode;
 use google\appengine\util\ArrayUtil;
+use google\appengine\util\StringUtil;
 
 /**
  * CloudStorageClient provides default fail implementations for all of the
@@ -37,6 +39,23 @@ use google\appengine\util\ArrayUtil;
  * perform.
  */
 abstract class CloudStorageClient {
+  /**
+   * Headers that may be controlled by the user through the stream context.
+   */
+  protected static $METADATA_HEADERS = [
+    'Cache-Control',
+    'Content-Disposition',
+    'Content-Encoding',
+    'Content-Language',
+    'Content-Type',
+    // x-goog-meta-* handled separately.
+  ];
+
+  /**
+   * Prefix for all metadata headers used when parsing and rendering.
+   */
+  const METADATA_HEADER_PREFIX = 'x-goog-meta-';
+
   // The default chunk size that we will read from the file. This value should
   // remain smaller than the maximum object size valid for memcache writes so
   // we can cache the reads.
@@ -49,6 +68,10 @@ abstract class CloudStorageClient {
   // failed Google Cloud Storage requests will be retried before returning
   // failure.
   const DEFAULT_MAXIMUM_NUMBER_OF_RETRIES = 2;
+
+  // URLFetch timeout to Cloud Storage - 30 seconds matches the expected timeout
+  // on the Cloud Storage Side.
+  const DEFAULT_CONNECTION_TIMEOUT_SECONDS = 30;
 
   // The default time the writable state of a bucket will be cached for.
   const DEFAULT_WRITABLE_CACHE_EXPIRY_SECONDS = 600;  // ten minutes
@@ -117,6 +140,18 @@ abstract class CloudStorageClient {
   const MEMCACHE_KEY_FORMAT = "_ah_gs_read_cache_%s_%s";
 
   /**
+   * Memcache key format for caching the results of reads from GCS. If the key
+   * generated using the filename and range is longer than the maximum allowed
+   * memcache key we hash down the value and use this format instead.
+   */
+  const MEMCACHE_KEY_HASH_FORMAT = "_ah_gs_read_hash_%s";
+
+  /**
+   * The maximum length of a memcache key.
+   */
+  const MEMCACHE_KEY_MAX_LENGTH = 250;
+
+  /**
    * Memcache key format for caching the results of checking if a bucket is
    * writable. The only way to check if an app can write to a bucket is by
    * actually writing a file. As the ACL on a bucket is unlikely to change
@@ -131,6 +166,11 @@ abstract class CloudStorageClient {
                                          HttpResponse::BAD_GATEWAY,
                                          HttpResponse::SERVICE_UNAVAILABLE,
                                          HttpResponse::GATEWAY_TIMEOUT];
+
+  protected static $retry_exception_codes = [
+      ErrorCode::DEADLINE_EXCEEDED,
+      ErrorCode::FETCH_ERROR,
+      ErrorCode::INTERNAL_TRANSIENT_ERROR];
 
   // Values that are allowed to be supplied as ACLs when writing objects.
   protected static $valid_acl_values = ["private",
@@ -167,13 +207,17 @@ abstract class CloudStorageClient {
       "read_cache_expiry_seconds" => self::DEFAULT_READ_CACHE_EXPIRY_SECONDS,
       "writable_cache_expiry_seconds" =>
           self::DEFAULT_WRITABLE_CACHE_EXPIRY_SECONDS,
+      "connection_timeout_seconds" => self::DEFAULT_CONNECTION_TIMEOUT_SECONDS,
   ];
 
   protected $bucket_name;  // Name of the bucket for this object.
   protected $object_name;  // The name of the object.
   protected $context_options = [];  // Any context arguments supplied on open.
   protected $url;  // GCS URL of the object.
+  protected $filename;  // GCS filename of the object
   protected $anonymous;  // Use anonymous access when contacting GCS.
+  protected static $stat_cache = [];  // Cache of stat results.
+  protected $hash_value = null;  // The hash value of this GCS object
 
   /**
    * Construct an object of CloudStorageClient.
@@ -199,7 +243,8 @@ abstract class CloudStorageClient {
     $this->anonymous = ArrayUtil::findByKeyOrNull($this->context_options,
                                                   "anonymous");
 
-    $this->url = $this->createObjectUrl($bucket, $object);
+    $this->filename = self::createGcsFilename($bucket, $object);
+    $this->url = self::createObjectUrl($bucket, $object);
   }
 
   public function __destruct() {
@@ -254,6 +299,24 @@ abstract class CloudStorageClient {
   }
 
   /**
+   * Subclass can override this method to return the metadata of the underlying
+   * GCS object.
+   */
+  public function getMetaData() {
+    trigger_error(sprintf("%s does not have metadata", get_class($this)));
+    return false;
+  }
+
+  /**
+   * Subclass can override this method to return the MIME content type of the
+   * underlying GCS object.
+   */
+  public function getContentType() {
+    trigger_error(sprintf("%s does not have content type", get_class($this)));
+    return false;
+  }
+
+  /**
    * Get the OAuth Token HTTP header for the supplied scope.
    *
    * @param $scopes mixed The scopes to acquire the token for.
@@ -276,21 +339,89 @@ abstract class CloudStorageClient {
   }
 
   /**
+   * Create a GCS filename for a target bucket and optional object.
+   *
+   * @param string $bucket The bucket name.
+   * @param string $object Optional object name.
+   *
+   * @returns string The GCS filename for the bucket and object names.
+   */
+  protected static function createGcsFilename($bucket, $object = null) {
+    if (!isset($object)) {
+      $object = "";
+    }
+
+    // Strip leading "/" for $object.
+    if (StringUtil::startsWith($object, "/")) {
+      $object = substr($object, 1);
+    }
+
+    return CloudStorageTools::getFilename($bucket, $object);
+  }
+
+  /**
    * Create a URL for a target bucket and optional object.
    *
    * @visibleForTesting
    */
   public static function createObjectUrl($bucket, $object = null) {
-    // Strip leading "/" for $object
-    if (isset($object) && $object[0] == "/") {
-      $object_name = substr($object, 1);
-    } else {
-      $object_name = "";
-    }
-
-    $gs_filename = CloudStorageTools::getFilename($bucket, $object_name);
+    $gs_filename = self::createGcsFilename($bucket, $object);
     return CloudStorageTools::getPublicUrl($gs_filename, true);
   }
+
+  /**
+   * Create a Unique hash for the given GCS filename.
+   *
+   * @param string $filename The filename to generate the hash value for.
+   * @return string The hash value.
+   */
+  protected static function getHashValue($filename) {
+    return hash('ripemd256', $filename);
+  }
+
+  /**
+   * Clear the stat cache.
+   *
+   * @param string $filename Option filename to clear from the cache.
+   */
+  public static function clearStatCache($filename = null) {
+    if (!empty($filename)) {
+      unset(self::$stat_cache[self::getHashValue($filename)]);
+    } else {
+      self::$stat_cache = [];
+    }
+  }
+
+  /**
+   * Try and retrieve a stat result from the stat cache.
+   *
+   * @param array $stat_result Value to write the stat result to, if found.
+   * @returns boolean True if the result was found, False otherwise.
+   */
+  protected function tryGetFromStatCache(&$stat_result) {
+    if (!$this->hash_value) {
+      $this->hash_value = self::getHashValue($this->filename);
+    }
+
+    if (array_key_exists($this->hash_value, self::$stat_cache)) {
+      $stat_result = self::$stat_cache[$this->hash_value];
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Add a stat result from the stat cache.
+   *
+   * @param array $stat_result Value to write the stat cache
+   */
+  protected function addToStatCache($stat_result) {
+    if (!$this->hash_value) {
+      $this->hash_value = self::getHashValue($this->filename);
+    }
+    self::$stat_cache[$this->hash_value] = $stat_result;
+  }
+
 
   /**
    * Return a Range HTTP header.
@@ -341,7 +472,6 @@ abstract class CloudStorageClient {
    * @return The value of the header if found, false otherwise.
    */
   protected function getHeaderValue($header_name, $headers) {
-    // Could be more than one header, in which case we keep an array.
     foreach($headers as $key => $value) {
       if (strcasecmp($key, $header_name) === 0) {
         return $value;
@@ -354,10 +484,13 @@ abstract class CloudStorageClient {
    *
    */
   private function doHttpRequest($url, $method, $headers, $body) {
+    $connection_timeout = $this->context_options['connection_timeout_seconds'];
     $req = new \google\appengine\URLFetchRequest();
     $req->setUrl($url);
     $req->setMethod(self::$request_map[$method]);
     $req->setMustValidateServerCertificate(true);
+    $req->setDeadline($connection_timeout);
+    $req->setFollowRedirects(false);
     if (isset($body)) {
       $req->setPayload($body);
     }
@@ -372,13 +505,27 @@ abstract class CloudStorageClient {
 
     for ($num_retries = 0; ; $num_retries++) {
       try {
-        ApiProxy::makeSyncCall('urlfetch', 'Fetch', $req, $resp);
+        ApiProxy::makeSyncCall('urlfetch',
+                               'Fetch',
+                               $req,
+                               $resp,
+                               $connection_timeout);
       } catch (ApplicationError $e) {
-        syslog(LOG_ERR,
-               sprintf("Call to URLFetch failed with application error %d.",
-                       $e->getApplicationError()));
-        return false;
+        if (in_array($e->getApplicationError(), self::$retry_exception_codes)) {
+          // We need to set a plausible value in the URLFetchResponse proto in
+          // case the retry loop falls through - this will also cause a retry
+          // if one is available.
+          $resp->setStatusCode(HttpResponse::GATEWAY_TIMEOUT);
+        } else {
+          syslog(LOG_ERR,
+                 sprintf("Call to URLFetch failed with application error %d " .
+                         "for url %s.",
+                         $e->getApplicationError(),
+                         $url));
+          return false;
+        }
       }
+
       $status_code = $resp->getStatusCode();
 
       if ($num_retries < $this->context_options['max_retries'] &&
@@ -430,6 +577,30 @@ abstract class CloudStorageClient {
     }
 
     return $result;
+  }
+
+  /**
+   * Extract metadata from HTTP response headers.
+   *
+   * Finds all headers that begin with METADATA_HEADER_PREFIX (x-goog-meta-),
+   * strips off the prefix, and creates an associative array.
+   *
+   * @param array $headers
+   *   Associative array of HTTP headers.
+   * @return array
+   *   Array of parsed metadata headers.
+   */
+  protected static function extractMetaData(array $headers) {
+    $metadata = [];
+    foreach($headers as $key => $value) {
+      if (StringUtil::startsWith(strtolower($key),
+                                 static::METADATA_HEADER_PREFIX)) {
+        $metadata_key = substr($key, strlen(static::METADATA_HEADER_PREFIX));
+        $metadata[$metadata_key] = $value;
+      }
+    }
+
+    return $metadata;
   }
 
   /**
@@ -486,6 +657,28 @@ abstract class CloudStorageClient {
                      $msg_prefix,
                      HttpResponse::getStatusMessage($http_status_code));
     }
+  }
+
+  /**
+   * Create a memcache key for the read data cache. If the filename is long
+   * enough that the key would exceed memcache limits, then a hash of the
+   * filename and the range is used to generate the key.
+   *
+   * We prefer the human readable key format where possible so users can easily
+   * identify which files and segments are stored in memcache.
+   *
+   * @param string $url The url of the file that contains the data being cached.
+   * @param string $range The range oheader f the data being cached.
+   *
+   * @return string The memcache key to use for storing data.
+   */
+  public static function getReadMemcacheKey($url, $range) {
+    $key = sprintf(self::MEMCACHE_KEY_FORMAT, $url, $range);
+    if (strlen($key) > self::MEMCACHE_KEY_MAX_LENGTH) {
+      $hash = hash("ripemd256", $key);
+      $key = sprintf(self::MEMCACHE_KEY_HASH_FORMAT, $hash);
+    }
+    return $key;
   }
 
 }

@@ -18,7 +18,12 @@
 
 
 
-"""Google Storage specific Files API calls."""
+"""Files API.
+
+.. deprecated:: 1.8.1
+   Use Google Cloud Storage Client library instead.
+
+Google Storage specific Files API calls."""
 
 
 
@@ -26,6 +31,7 @@
 
 
 from __future__ import with_statement
+
 
 
 __all__ = ['create']
@@ -54,7 +60,7 @@ _USER_METADATA_PREFIX = 'x-goog-meta-'
 
 
 
-_GS_RESTFUL_URL = 'commondatastorage.googleapis.com'
+_GS_RESTFUL_URL = 'storage.googleapis.com'
 _GS_RESTFUL_SCOPE_READ_ONLY = (
     'https://www.googleapis.com/auth/devstorage.read_only')
 _GS_RESTFUL_API_VERSION = '2'

@@ -19,8 +19,6 @@
 
 namespace google\appengine\api\taskqueue;
 
-require_once 'google/appengine/api/taskqueue/TaskQueueException.php';
-
 /**
  * Thrown when adding a task, but a task with the same name already exists in
  * the queue.

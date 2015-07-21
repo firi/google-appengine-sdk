@@ -28,9 +28,8 @@
 
 
 
-
-
 """Base handler class for all mapreduce handlers."""
+
 
 
 
@@ -49,7 +48,7 @@ except ImportError:
   pipeline_base = None
 try:
 
-  from google.appengine.ext import cloudstorage
+  from google.appengine._internal import cloudstorage
   if hasattr(cloudstorage, "_STUB"):
     cloudstorage = None
 except ImportError:
@@ -76,11 +75,13 @@ class TaskQueueHandler(webapp.RequestHandler):
   Sub-classes should implement
   1. the 'handle' method for all POST request.
   2. '_preprocess' method for decoding or validations before handle.
-  3. '_drop_gracefully' method if _preprocess fails and the task has to
+  3. '_drop_gracefully' method if task has failed too many times and has to
      be dropped.
 
   In Python27 runtime, webapp2 will automatically replace webapp.
   """
+
+  _DEFAULT_USER_AGENT = "App Engine Python MR"
 
   def __init__(self, *args, **kwargs):
 
@@ -92,7 +93,12 @@ class TaskQueueHandler(webapp.RequestHandler):
     super(TaskQueueHandler, self).__init__(*args, **kwargs)
     if cloudstorage:
       cloudstorage.set_default_retry_params(
-          cloudstorage.RetryParams(save_access_token=True))
+          cloudstorage.RetryParams(
+              min_retries=5,
+              max_retries=10,
+              urlfetch_timeout=parameters._GCS_URLFETCH_TIMEOUT_SEC,
+              save_access_token=True,
+              _user_agent=self._DEFAULT_USER_AGENT))
 
   def initialize(self, request, response):
     """Initialize.
@@ -126,16 +132,8 @@ class TaskQueueHandler(webapp.RequestHandler):
       self._drop_gracefully()
       return
 
-    try:
-      self._preprocess()
-      self._preprocess_success = True
-
-    except:
-      self._preprocess_success = False
-      logging.error(
-          "Preprocess task %s failed. Dropping it permanently.",
-          self.request.headers["X-AppEngine-TaskName"])
-      self._drop_gracefully()
+    self._preprocess()
+    self._preprocess_success = True
 
   def post(self):
     if self._preprocess_success:
@@ -150,13 +148,15 @@ class TaskQueueHandler(webapp.RequestHandler):
 
     This method is called after webapp initialization code has been run
     successfully. It can thus access self.request, self.response and so on.
+
+    Failures will be retried by taskqueue.
     """
     pass
 
   def _drop_gracefully(self):
     """Drop task gracefully.
 
-    When preprocess failed, this method is called before the task is dropped.
+    When task failed too many time, this method is called before it's dropped.
     """
     pass
 
@@ -195,6 +195,12 @@ class JsonHandler(webapp.RequestHandler):
 
     JSON handlers are mapped to /base_path/command/command_name thus they
     require special treatment.
+
+    Raises:
+      BadRequestPathError: if the path does not end with "/command".
+
+    Returns:
+      The base path.
     """
     path = self.request.path
     base_path = path[:path.rfind("/")]
@@ -204,6 +210,7 @@ class JsonHandler(webapp.RequestHandler):
     return base_path[:base_path.rfind("/")]
 
   def _handle_wrapper(self):
+    """The helper method for handling JSON Post and Get requests."""
     if self.request.headers.get("X-Requested-With") != "XMLHttpRequest":
       logging.error("Got JSON request with no X-Requested-With header")
       self.response.set_status(
@@ -228,7 +235,8 @@ class JsonHandler(webapp.RequestHandler):
     self.response.headers["Content-Type"] = "text/javascript"
     try:
       output = simplejson.dumps(self.json_response, cls=json_util.JsonEncoder)
-    except:
+
+    except Exception, e:
       logging.exception("Could not serialize to JSON")
       self.response.set_status(500, message="Could not serialize to JSON")
       return
@@ -258,6 +266,8 @@ class HugeTaskHandler(TaskQueueHandler):
   """Base handler for processing HugeTasks."""
 
   class _RequestWrapper(object):
+    """Container of a request and associated parameters."""
+
     def __init__(self, request):
       self._request = request
       self._params = model.HugeTask.decode_payload(request)

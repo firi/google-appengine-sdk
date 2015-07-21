@@ -68,8 +68,20 @@ final class CloudStorageWriteClient extends CloudStorageClient {
     }
     $headers = array_merge($headers, $token_header);
 
-    if (array_key_exists("Content-Type", $this->context_options)) {
-      $headers["Content-Type"] = $this->context_options["Content-Type"];
+    // TODO: b/13132830: Remove once feature releases.
+    if (!ini_get('google_app_engine.enable_additional_cloud_storage_headers')) {
+      foreach (static::$METADATA_HEADERS as $key) {
+        // Leave Content-Type since it has been supported.
+        if ($key != 'Content-Type') {
+          unset($this->context_options[$key]);
+        }
+      }
+    }
+
+    foreach (static::$METADATA_HEADERS as $key) {
+      if (array_key_exists($key, $this->context_options)) {
+        $headers[$key] = $this->context_options[$key];
+      }
     }
 
     if (array_key_exists("acl", $this->context_options)) {
@@ -90,12 +102,13 @@ final class CloudStorageWriteClient extends CloudStorageClient {
               E_USER_WARNING);
           return false;
         }
-        if (!preg_match(self::METADATA_KEY_REGEX, $value)) {
+        if (!preg_match(self::METADATA_VALUE_REGEX, $value)) {
           trigger_error(sprintf("Invalid metadata value: %s", $value),
               E_USER_WARNING);
           return false;
         }
         $headers['x-goog-meta-' . $name] = $value;
+        $this->metadata[$name] = $value;
       }
     }
 
@@ -181,6 +194,22 @@ final class CloudStorageWriteClient extends CloudStorageClient {
     $this->writeBufferToGS(true);
   }
 
+  public function getMetaData() {
+    if (array_key_exists("metadata", $this->context_options)) {
+      return $this->context_options["metadata"];
+    }
+
+    return [];
+  }
+
+  public function getContentType() {
+    if (array_key_exists("Content-Type", $this->context_options)) {
+      return $this->context_options["Content-Type"];
+    }
+
+    return null;
+  }
+
   private function writeBufferToGS($complete = false) {
     $headers = $this->getOAuthTokenHeader(parent::WRITE_SCOPE);
     if ($headers === false) {
@@ -253,9 +282,8 @@ final class CloudStorageWriteClient extends CloudStorageClient {
         for ($i = 0; $i < $object_length; $i += parent::DEFAULT_READ_SIZE) {
           $range = $this->getRangeHeader($i,
                                          $i + parent::DEFAULT_READ_SIZE - 1);
-          $key_names[] = sprintf(parent::MEMCACHE_KEY_FORMAT,
-                                 $this->url,
-                                 $range['Range']);
+          $key_names[] = static::getReadMemcacheKey($this->url,
+                                                    $range['Range']);
         }
         $memcached = new \Memcached();
         $memcached->deleteMulti($key_names);

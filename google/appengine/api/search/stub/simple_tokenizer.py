@@ -21,10 +21,12 @@
 
 
 
+
 import re
 
 
 from google.appengine.datastore import document_pb
+from google.appengine.api.search import search_util
 from google.appengine.api.search.stub import tokens
 
 
@@ -66,9 +68,10 @@ class SimpleTokenizer(object):
     else:
       return value.lower()
 
-  def TokenizeText(self, text, token_position=0):
+  def TokenizeText(self, text, token_position=0,
+                   input_field_type=document_pb.FieldValue.TEXT):
     """Tokenizes the text into a sequence of Tokens."""
-    return self._TokenizeForType(field_type=document_pb.FieldValue.TEXT,
+    return self._TokenizeForType(field_type=input_field_type,
                                  value=text, token_position=token_position)
 
   def TokenizeValue(self, field_value, token_position=0):
@@ -77,9 +80,10 @@ class SimpleTokenizer(object):
       return self._TokenizeForType(field_type=field_value.type(),
                                    value=field_value.geo(),
                                    token_position=token_position)
-    return self._TokenizeForType(field_type=field_value.type(),
-                                   value=field_value.string_value(),
-                                   token_position=token_position)
+    return self._TokenizeForType(
+        field_type=field_value.type(),
+        value=search_util.RemoveAccentsNfkd(field_value.string_value()),
+        token_position=token_position)
 
   def _TokenizeString(self, value, field_type):
     value = self.SetCase(value)

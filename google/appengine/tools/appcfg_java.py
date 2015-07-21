@@ -17,22 +17,28 @@
 """Appcfg logic specific to Java apps."""
 from __future__ import with_statement
 
+import collections
 import os.path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 
+from google.appengine.datastore import datastore_index
+from google.appengine.datastore import datastore_index_xml
 from google.appengine.tools import app_engine_web_xml_parser
 from google.appengine.tools import backends_xml_parser
 from google.appengine.tools import cron_xml_parser
 from google.appengine.tools import dispatch_xml_parser
 from google.appengine.tools import dos_xml_parser
-from google.appengine.tools import indexes_xml_parser
 from google.appengine.tools import jarfile
+from google.appengine.tools import java_quickstart
+from google.appengine.tools import java_utils
 from google.appengine.tools import queue_xml_parser
 from google.appengine.tools import web_xml_parser
+from google.appengine.tools import xml_parser_utils
 from google.appengine.tools import yaml_translator
 
 
@@ -60,11 +66,8 @@ def IsWarFileWithoutYaml(dir_path):
   if os.path.isfile(os.path.join(dir_path, 'app.yaml')):
     return False
   web_inf = os.path.join(dir_path, 'WEB-INF')
-  if not os.path.isdir(web_inf):
-    return False
-  if not set(['appengine-web.xml', 'web.xml']).issubset(os.listdir(web_inf)):
-    return False
-  return True
+  return (os.path.isdir(web_inf) and
+          set(['appengine-web.xml', 'web.xml']).issubset(os.listdir(web_inf)))
 
 
 def AddUpdateOptions(parser):
@@ -77,6 +80,10 @@ def AddUpdateOptions(parser):
                     dest='retain_upload_dir', default=False,
                     help='Do not delete temporary (staging) directory used '
                     'in uploading Java apps')
+  parser.add_option('--no_symlinks', action='store_true',
+                    dest='no_symlinks', default=False,
+                    help='Do not use symbolic links when making the temporary '
+                    '(staging) directory for uploading Java apps')
   parser.add_option('--compile_encoding', action='store',
                     dest='compile_encoding', default='UTF-8',
                     help='Set the encoding to be used when compiling Java '
@@ -90,6 +97,17 @@ def AddUpdateOptions(parser):
   parser.add_option('--enable_jar_classes', action='store_true',
                     dest='do_jar_classes', default=False,
                     help='Jar the WEB-INF/classes content.')
+  parser.add_option('--enable_jar_splitting', action='store_true',
+                    dest='do_jar_splitting', default=False,
+                    help='Split large jar files (> 32M) into smaller '
+                    'fragments.')
+  parser.add_option('--jar_splitting_excludes', action='store',
+                    dest='jar_splitting_exclude_suffixes', default='',
+                    help='When --enable_jar_splitting is specified and '
+                    '--jar_splitting_excludes specifies a comma-separated list '
+                    'of suffixes, a file in a jar whose name ends with one '
+                    'of the suffixes will not be included in the split jar '
+                    'fragments.')
 
 
 class JavaAppUpdate(object):
@@ -97,32 +115,31 @@ class JavaAppUpdate(object):
 
   _JSP_REGEX = re.compile('.*\\.jspx?')
 
-  class _XmlParser(object):
-
-
-
-    def __init__(self, xml_name, yaml_name, xml_to_yaml_function):
-      self.xml_name = xml_name
-      self.yaml_name = yaml_name
-      self.xml_to_yaml_function = xml_to_yaml_function
+  _xml_parser = collections.namedtuple(
+      '_xml_parser', ['xml_name', 'yaml_name', 'xml_to_yaml_function'])
 
   _XML_PARSERS = [
-      _XmlParser('cron.xml', 'cron.yaml', cron_xml_parser.GetCronYaml),
-      _XmlParser('datastore-indexes.xml', 'index.yaml',
-                 indexes_xml_parser.GetIndexYaml),
-      _XmlParser('dispatch.xml', 'dispatch.yaml',
-                 dispatch_xml_parser.GetDispatchYaml),
-      _XmlParser('dos.xml', 'dos.yaml', dos_xml_parser.GetDosYaml),
-      _XmlParser('queue.xml', 'queue.yaml', queue_xml_parser.GetQueueYaml),
+      _xml_parser('backends.xml', 'backends.yaml',
+                  backends_xml_parser.GetBackendsYaml),
+      _xml_parser('cron.xml', 'cron.yaml', cron_xml_parser.GetCronYaml),
+      _xml_parser('dispatch.xml', 'dispatch.yaml',
+                  dispatch_xml_parser.GetDispatchYaml),
+      _xml_parser('dos.xml', 'dos.yaml', dos_xml_parser.GetDosYaml),
+      _xml_parser('queue.xml', 'queue.yaml', queue_xml_parser.GetQueueYaml),
   ]
 
   _XML_VALIDATOR_CLASS = 'com.google.appengine.tools.admin.XmlValidator'
 
   def __init__(self, basepath, options):
-    self.basepath = basepath
+    self.basepath = os.path.abspath(basepath)
     self.options = options
+    if not hasattr(self.options, 'no_symlinks'):
 
-    java_home, exec_suffix = _JavaHomeAndSuffix()
+      self.options.no_symlinks = True
+
+
+
+    java_home, exec_suffix = java_utils.JavaHomeAndSuffix()
     self.java_command = os.path.join(java_home, 'bin', 'java' + exec_suffix)
     self.javac_command = os.path.join(java_home, 'bin', 'javac' + exec_suffix)
 
@@ -134,7 +151,16 @@ class JavaAppUpdate(object):
       self.app_engine_web_xml.app_id = self.options.app_id
     if self.options.version:
       self.app_engine_web_xml.version_id = self.options.version
-    self.web_xml = self._ReadWebXml()
+    quickstart = xml_parser_utils.BooleanValue(
+        self.app_engine_web_xml.beta_settings.get('java_quickstart', 'false'))
+    if quickstart:
+      web_xml_str, _ = java_quickstart.quickstart_generator(self.basepath)
+      webdefault_xml_str = java_quickstart.get_webdefault_xml()
+      web_xml_str = java_quickstart.remove_mappings(
+          web_xml_str, webdefault_xml_str)
+      self.web_xml = web_xml_parser.WebXmlParser().ProcessXml(web_xml_str)
+    else:
+      self.web_xml = self._ReadWebXml()
 
   def _ValidateXmlFiles(self):
 
@@ -188,12 +214,6 @@ class JavaAppUpdate(object):
         file_name='web.xml',
         parser=web_xml_parser.WebXmlParser)
 
-  def _ReadBackendsXml(self):
-    return self._ReadAndParseXml(
-        basepath=self.basepath,
-        file_name='backends.xml',
-        parser=backends_xml_parser.BackendsXmlParser)
-
   def _ReadAndParseXml(self, basepath, file_name, parser):
     with open(os.path.join(basepath, 'WEB-INF', file_name)) as file_handle:
       return parser().ProcessXml(file_handle.read())
@@ -220,11 +240,10 @@ class JavaAppUpdate(object):
       ConfigurationError: if the app to be staged has a configuration error.
       IOError: if there was an I/O problem, for example when scanning jar files.
     """
-    full_basepath = os.path.abspath(self.basepath)
     stage_dir = tempfile.mkdtemp(prefix='appcfgpy')
     static_dir = os.path.join(stage_dir, '__static__')
     os.mkdir(static_dir)
-    self._CopyOrLink(full_basepath, stage_dir, static_dir, False)
+    self._CopyOrLink(self.basepath, stage_dir, static_dir, False)
     self.app_engine_web_xml.app_root = stage_dir
 
     if self.options.compile_jsps:
@@ -264,14 +283,34 @@ class JavaAppUpdate(object):
         with open(yaml_file, 'w') as yaml:
           yaml.write(yaml_string)
 
+
+
+
+
+
+    indexes = []
+    for xml_name in (
+        'datastore-indexes.xml',
+        os.path.join('appengine-generated', 'datastore-indexes-auto.xml')):
+      xml_name = os.path.join(self.basepath, 'WEB-INF', xml_name)
+      if os.path.exists(xml_name):
+        with open(xml_name) as xml_file:
+          xml_string = xml_file.read()
+        index_definitions = datastore_index_xml.IndexesXmlToIndexDefinitions(
+            xml_string)
+        indexes.extend(index_definitions.indexes)
+    if indexes:
+      yaml_string = datastore_index.IndexDefinitions(indexes=indexes).ToYAML()
+      yaml_file = os.path.join(appengine_generated, 'index.yaml')
+      with open(yaml_file, 'w') as yaml:
+        yaml.write(yaml_string)
+
     return stage_dir
 
-  def GenerateAppYamlString(self, basepath, static_file_list, api_version=None):
+  def GenerateAppYamlString(self, static_file_list, api_version=None):
     """Constructs an app.yaml string equivalent to the XML files under WEB-INF.
 
     Args:
-      basepath: a string that is the path to the WEB-INF directory. This
-        might not be self.basepath, because it might be a staging directory.
       static_file_list: a list of strings that are the absolute path names of
         static file resources.
       api_version: a string that is the Java API version number, or None if
@@ -281,12 +320,8 @@ class JavaAppUpdate(object):
       A string that would have the same effect as the XML files under WEB-INF
       if it were the contents of an app.yaml file.
     """
-    backends = []
-    if os.path.isfile(os.path.join(self.basepath, 'WEB-INF', 'backends.xml')):
-      backends = self._ReadBackendsXml(basepath)
     return yaml_translator.AppYamlTranslator(
         self.app_engine_web_xml,
-        backends,
         self.web_xml,
         static_file_list,
         api_version).GetYaml()
@@ -298,14 +333,16 @@ class JavaAppUpdate(object):
       The path to the WEB-INF/appengine-generated directory.
     """
     static_file_list = self._GetStaticFileList(stage_dir)
-    yaml_str = self.GenerateAppYamlString(
-        stage_dir, static_file_list, api_version)
+    yaml_str = self.GenerateAppYamlString(static_file_list, api_version)
     if not os.path.isdir(appengine_generated):
       os.mkdir(appengine_generated)
     with open(os.path.join(appengine_generated, 'app.yaml'), 'w') as handle:
       handle.write(yaml_str)
 
   def _CopyOrLink(self, source_dir, stage_dir, static_dir, inside_web_inf):
+    source_dir = os.path.abspath(source_dir)
+    stage_dir = os.path.abspath(stage_dir)
+    static_dir = os.path.abspath(static_dir)
     for file_name in os.listdir(source_dir):
       file_path = os.path.join(source_dir, file_name)
 
@@ -330,12 +367,19 @@ class JavaAppUpdate(object):
 
   def _CopyOrLinkFile(self, source, dest):
 
-    if not os.path.exists(os.path.dirname(dest)):
-      os.makedirs(os.path.dirname(dest))
-    if not source.endswith('web.xml'):
+    destdir = os.path.dirname(dest)
+    if not os.path.exists(destdir):
+      os.makedirs(destdir)
+    if self._ShouldSplitJar(source):
+      self._SplitJar(source, destdir)
+    elif source.endswith('web.xml'):
+      shutil.copy(source, dest)
+      os.chmod(dest, os.stat(dest).st_mode | stat.S_IWRITE)
+
+    elif self.options.no_symlinks:
+      shutil.copy(source, dest)
+    else:
       os.symlink(source, dest)
-      return
-    shutil.copy(source, dest)
 
   def _MoveDirectoryContents(self, source_dir, dest_dir):
     """Move the contents of source_dir to dest_dir, which might not exist.
@@ -358,6 +402,32 @@ class JavaAppUpdate(object):
           raise IOError('Cannot overwrite existing %s' % dest_entry)
       else:
         shutil.move(source_entry, dest_entry)
+
+  _MAX_SIZE = 32 * 1000 * 1000
+
+
+  def _ShouldSplitJar(self, path):
+    return (path.lower().endswith('.jar') and self.options.do_jar_splitting and
+            os.path.getsize(path) >= self._MAX_SIZE)
+
+  def _SplitJar(self, jar_path, dest_dir):
+    """Split a source jar into two or more jars in the given dest_dir.
+
+    Args:
+      jar_path: string that is the path to jar to be split. The contents of this
+        jar will be copied into the output jars, but the jar itself will not be
+        affected.
+      dest_dir: directory into which to put the jars that result from splitting
+        the input jar.
+
+    Raises:
+      IOError: if the jar cannot be split.
+    """
+
+    exclude_suffixes = (
+        set(self.options.jar_splitting_exclude_suffixes.split(',')) - set(['']))
+    include = lambda name: not any(name.endswith(s) for s in exclude_suffixes)
+    jarfile.SplitJar(jar_path, dest_dir, self._MAX_SIZE, include)
 
   @staticmethod
   def _GetStaticFileList(staging_dir):
@@ -421,6 +491,7 @@ class JavaAppUpdate(object):
         self.javac_command,
         '-classpath', classpath,
         '-d', jsp_class_dir,
+        '-target', '1.7',
         '-encoding', self.options.compile_encoding,
     ] + java_files
 
@@ -531,61 +602,6 @@ def _FilesMatching(root, predicate=lambda f: True):
   for path, _, files in os.walk(root):
     matches += [os.path.join(path, f) for f in files if predicate(f)]
   return matches
-
-
-def _JavaHomeAndSuffix():
-  """Find the directory that the JDK is installed in.
-
-  The JDK install directory is expected to have a bin directory that contains
-  at a minimum the java and javac executables. If the environment variable
-  JAVA_HOME is set then it must point to such a directory. Otherwise, we look
-  for javac on the PATH and check that it is inside a JDK install directory.
-
-  Returns:
-    A tuple where the first element is the JDK install directory and the second
-    element is a suffix that must be appended to executables in that directory
-    ('' on Unix-like systems, '.exe' on Windows).
-
-  Raises:
-    RuntimeError: If JAVA_HOME is set but is not a JDK install directory, or
-    otherwise if a JDK install directory cannot be found based on the PATH.
-  """
-  def ResultForJdkAt(path):
-    """Return (path, suffix) if path is a JDK install directory, else None."""
-    def IsExecutable(binary):
-      return os.path.isfile(binary) and os.access(binary, os.X_OK)
-
-    def ResultFor(path):
-      for suffix in ['', '.exe']:
-        if all(IsExecutable(os.path.join(path, 'bin', binary + suffix))
-               for binary in ['java', 'javac', 'jar']):
-          return (path, suffix)
-      return None
-
-    result = ResultFor(path)
-    if not result:
-
-
-      head, tail = os.path.split(path)
-      if tail == 'jre':
-        result = ResultFor(head)
-    return result
-
-  java_home = os.getenv('JAVA_HOME')
-  if java_home:
-    result = ResultForJdkAt(java_home)
-    if result:
-      return result
-    else:
-      raise RuntimeError(
-          'JAVA_HOME is set but does not reference a valid JDK: %s' % java_home)
-  for path_dir in os.environ['PATH'].split(os.pathsep):
-    maybe_root, last = os.path.split(path_dir)
-    if last == 'bin':
-      result = ResultForJdkAt(maybe_root)
-      if result:
-        return result
-  raise RuntimeError('Did not find JDK in PATH and JAVA_HOME is not set')
 
 
 def _FindApiJars(lib_dir):

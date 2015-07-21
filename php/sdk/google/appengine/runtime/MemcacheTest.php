@@ -200,6 +200,26 @@ class MemcacheTest extends ApiProxyTestBase {
     $this->apiProxyMock->verify();
   }
 
+  public function testGetUnexpectedValue() {
+    $memcache = new Memcache();
+
+    $request = new MemcacheGetRequest();
+    $request->addKey("key");
+
+    $response = new MemcacheGetResponse();
+    $item = $response->addItem();
+    $item->setKey("key");
+    $item->setValue("value");
+    $item->setFlags(2);  // Python's picked type.
+
+    $this->apiProxyMock->expectCall('memcache',
+                                    'Get',
+                                    $request,
+                                    $response);
+    $this->assertFalse(memcache_get($memcache, "key"));
+    $this->apiProxyMock->verify();
+  }
+
   public function testGetMany() {
     $memcache = new Memcache();
 
@@ -279,6 +299,26 @@ class MemcacheTest extends ApiProxyTestBase {
     $this->assertFalse(memcache_increment($memcache, "key", 5));
     $this->apiProxyMock->verify();
   }
+
+  public function testDecrementSuccess() {
+    $memcache = new Memcache();
+
+    $request = new MemcacheIncrementRequest();
+    $request->setKey("key");
+    $request->setDelta(4);
+    $request->setDirection(MemcacheIncrementRequest\Direction::DECREMENT);
+
+    $response = new MemcacheIncrementResponse();
+    $response->setNewValue(8);
+
+    $this->apiProxyMock->expectCall('memcache',
+                                    'Increment',
+                                    $request,
+                                    $response);
+    $this->assertEquals(8, memcache_decrement($memcache, "key", 4));
+    $this->apiProxyMock->verify();
+  }
+
 
   public function testReplaceSuccess() {
     $memcache = new Memcache();

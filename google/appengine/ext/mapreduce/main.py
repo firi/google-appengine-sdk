@@ -42,6 +42,7 @@ This module should be specified as a handler for mapreduce URLs in app.yaml:
 
 
 
+
 import google
 
 
@@ -86,10 +87,10 @@ def create_handlers_map():
 
 
 
-      (r".*/worker_callback/.*", handlers.MapperWorkerCallbackHandler),
-      (r".*/controller_callback/.*", handlers.ControllerCallbackHandler),
-      (r".*/kickoffjob_callback/.*", handlers.KickOffJobHandler),
-      (r".*/finalizejob_callback/.*", handlers.FinalizeJobHandler),
+      (r".*/worker_callback.*", handlers.MapperWorkerCallbackHandler),
+      (r".*/controller_callback.*", handlers.ControllerCallbackHandler),
+      (r".*/kickoffjob_callback.*", handlers.KickOffJobHandler),
+      (r".*/finalizejob_callback.*", handlers.FinalizeJobHandler),
 
 
 

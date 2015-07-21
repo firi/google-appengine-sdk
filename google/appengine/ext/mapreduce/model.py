@@ -41,6 +41,7 @@ serialized to/from json and passed around with other means.
 
 
 
+
 __all__ = ["MapreduceState",
            "MapperSpec",
            "MapreduceControl",
@@ -53,9 +54,6 @@ __all__ = ["MapreduceState",
 
 import cgi
 import datetime
-import os
-import random
-import time
 import urllib
 import zlib
 
@@ -240,30 +238,6 @@ class HugeTask(object):
     return result
 
 
-
-_FUTURE_TIME = 2**34
-
-
-def _get_descending_key(gettime=time.time):
-  """Returns a key name lexically ordered by time descending.
-
-  This lets us have a key name for use with Datastore entities which returns
-  rows in time descending order when it is scanned in lexically ascending order,
-  allowing us to bypass index building for descending indexes.
-
-  Args:
-    gettime: Used for testing.
-
-  Returns:
-    A string with a time descending key.
-  """
-  now_descending = int((_FUTURE_TIME - gettime()) * 100)
-  request_id_hash = os.environ.get("REQUEST_ID_HASH")
-  if not request_id_hash:
-    request_id_hash = str(random.getrandbits(32))
-  return "%d%s" % (now_descending, request_id_hash)
-
-
 class CountersMap(json_util.JsonMixin):
   """Maintains map from counter name to counter value.
 
@@ -287,16 +261,17 @@ class CountersMap(json_util.JsonMixin):
     """Compute string representation."""
     return "mapreduce.model.CountersMap(%r)" % self.counters
 
-  def get(self, counter_name):
+  def get(self, counter_name, default=0):
     """Get current counter value.
 
     Args:
       counter_name: counter name as string.
+      default: default value if one doesn't exist.
 
     Returns:
       current counter value as int. 0 if counter was not set.
     """
-    return self.counters.get(counter_name, 0)
+    return self.counters.get(counter_name, default)
 
   def increment(self, counter_name, delta):
     """Increment counter value.
@@ -493,6 +468,17 @@ class MapreduceSpec(json_util.JsonMixin):
 
   PARAM_DONE_CALLBACK_QUEUE = "done_callback_queue"
 
+
+
+
+
+
+  PARAM_DONE_CALLBACK_TARGET = "done_callback_target"
+
+
+
+  PARAM_MAPREDUCE_TARGET = "mapreduce_target"
+
   def __init__(self,
                name,
                mapreduce_id,
@@ -624,6 +610,7 @@ class MapreduceState(db.Model):
   _RESULTS = frozenset([RESULT_SUCCESS, RESULT_FAILED, RESULT_ABORTED])
 
 
+
   mapreduce_spec = json_util.JsonProperty(MapreduceSpec, indexed=False)
   active = db.BooleanProperty(default=True, indexed=False)
   last_poll_time = db.DateTimeProperty(required=True)
@@ -726,7 +713,7 @@ class MapreduceState(db.Model):
   @staticmethod
   def new_mapreduce_id():
     """Generate new mapreduce id."""
-    return _get_descending_key()
+    return util._get_descending_key()
 
   def __eq__(self, other):
     if not isinstance(other, self.__class__):
@@ -935,6 +922,7 @@ class ShardState(db.Model):
 
   mapreduce_id = db.StringProperty(required=True)
   active = db.BooleanProperty(default=True, indexed=False)
+  input_finished = db.BooleanProperty(default=False, indexed=False)
   counters_map = json_util.JsonProperty(
       CountersMap, default=CountersMap(), indexed=False)
   result_status = db.StringProperty(choices=_RESULTS, indexed=False)
@@ -983,6 +971,7 @@ class ShardState(db.Model):
     self.last_work_item = ""
     self.active = True
     self.result_status = None
+    self.input_finished = False
     self.counters_map = CountersMap()
     self.slice_id = 0
     self.slice_start_time = None
@@ -1014,6 +1003,12 @@ class ShardState(db.Model):
   def set_for_abort(self):
     self.active = False
     self.result_status = self.RESULT_ABORTED
+
+  def set_input_finished(self):
+    self.input_finished = True
+
+  def is_input_finished(self):
+    return self.input_finished
 
   def set_for_success(self):
     self.active = False
@@ -1105,9 +1100,6 @@ class ShardState(db.Model):
   @classmethod
   def find_all_by_mapreduce_state(cls, mapreduce_state):
     """Find all shard states for given mapreduce.
-
-    Never runs within a transaction since it may touch >5 entity groups (one
-    for each shard).
 
     Args:
       mapreduce_state: MapreduceState instance

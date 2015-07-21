@@ -22,6 +22,8 @@
 """Trivial implementation of the UserService."""
 
 
+
+
 import os
 import urllib
 import urlparse
@@ -80,7 +82,7 @@ class UserServiceStub(apiproxy_stub.APIProxyStub):
     self._logout_url = logout_url
     self.__scopes = None
 
-    self.SetOAuthUser()
+    self.SetOAuthUser(is_admin=(os.environ.get('OAUTH_IS_ADMIN', '0') == '1'))
 
 
 
@@ -169,6 +171,8 @@ class UserServiceStub(apiproxy_stub.APIProxyStub):
       response.set_auth_domain(self.__domain)
       response.set_is_admin(self.__is_admin)
       response.set_client_id(self.__client_id)
+      if request.request_writer_permission():
+        response.set_is_project_writer(self.__is_admin)
       for scope in authorized_scopes:
         response.add_scopes(scope)
 
@@ -199,8 +203,14 @@ class UserServiceStub(apiproxy_stub.APIProxyStub):
     if host and protocol:
       return continue_url
 
-    protocol, host, _, _, _, _ = urlparse.urlparse(
-        self.request_data.get_request_url(request_id))
+    try:
+      protocol, host, _, _, _, _ = urlparse.urlparse(
+          self.request_data.get_request_url(request_id))
+    except KeyError:
+
+
+
+      pass
 
 
     if path == '':

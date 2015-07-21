@@ -23,6 +23,7 @@
 from __future__ import with_statement
 
 
+
 import datetime
 import logging
 import os
@@ -274,24 +275,34 @@ class Recorder(object):
       query_string = '?' + query_string
     return query_string
 
-  def record_custom_event(self, label, data=None):
+  def record_custom_event(self, label, data=None, start=None, end=None):
     """Record a custom event.
 
     Args:
       label: A string to use as event label; a 'custom.' prefix will be added.
       data: Optional value to record.  This can be anything; the value
         will be formatted using format_value() before it is recorded.
+      start: time.time() of the start of the time range, default now. Supply
+        start when you want a range intead of a 0ms duration event.
+      end: time.time() of the end of the time range, default now. Supply end
+        when the range was in the past or when you want the range to match other
+        monitoring/analytics. Supplying end without start is an error.
     """
-
     pre_now = time.time()
     sreq = format_value(data)
     now = time.time()
-    delta = int(1000 * (now - self.start_timestamp))
+    if end and not start:
+      raise ValueError('Please specify a start time along with the end time.')
+    start = start or pre_now
+    end = end or pre_now
+    delta = int(1000 * (start - self.start_timestamp))
+    duration = int(1000 * (end - start))
     trace = datamodel_pb.IndividualRpcStatsProto()
     self.get_call_stack(trace)
     trace.set_service_call_name('custom.' + label)
     trace.set_request_data_summary(sreq)
     trace.set_start_offset_milliseconds(delta)
+    trace.set_duration_milliseconds(duration)
     with self._lock:
       self.traces.append(trace)
       self.overhead += (now - pre_now)
@@ -345,8 +356,8 @@ class Recorder(object):
     if config.DATASTORE_DETAILS:
       details = trace.mutable_datastore_details()
       for key in response.key_list():
-        newent = details.add_keys_written()
-        newent.CopyFrom(key)
+        detail = details.add_keys_written()
+        detail.CopyFrom(key)
     if config.CALC_RPC_COSTS:
       writes = response.cost().entity_writes() + response.cost().index_writes()
       trace.set_call_cost_microdollars(writes * config.DATASTORE_WRITE_OP_COST)
@@ -396,8 +407,8 @@ class Recorder(object):
     if config.DATASTORE_DETAILS:
       details = trace.mutable_datastore_details()
       for key in request.key_list():
-        newent = details.add_keys_read()
-        newent.CopyFrom(key)
+        detail = details.add_keys_read()
+        detail.CopyFrom(key)
       for entity_present in response.entity_list():
         details.add_get_successful_fetch(entity_present.has_entity())
     if config.CALC_RPC_COSTS:
@@ -433,12 +444,12 @@ class Recorder(object):
       trace: IndividualStatsProto where information must be recorded.
     """
     details = trace.mutable_datastore_details()
-    if not response.keys_only():
+    if not response.small_ops():
 
 
       for entity in response.result_list():
-        newent = details.add_keys_read()
-        newent.CopyFrom(entity.key())
+        detail = details.add_keys_read()
+        detail.CopyFrom(entity.key())
     if call == 'RunQuery':
 
       if config.DATASTORE_DETAILS:
@@ -466,7 +477,7 @@ class Recorder(object):
     if config.CALC_RPC_COSTS:
       num_results = len(response.result_list()) + response.skipped_results()
       cost_micropennies = config.DATASTORE_READ_OP_COST * baseline_reads
-      if response.keys_only():
+      if response.small_ops():
 
         cost_micropennies += config.DATASTORE_SMALL_OP_COST * num_results
         trace.set_call_cost_microdollars(cost_micropennies)

@@ -1947,7 +1947,7 @@ class SigningService(_server_stub_base_class):
     """Creates a new SigningService Stubby client stub.
 
     Args:
-      rpc_stub_parameters: an RPC_StubParameter instance.
+      rpc_stub_parameters: an RPC_StubParameters instance.
       service_name: the service name used by the Stubby server.
     """
 
@@ -2030,35 +2030,35 @@ class SigningService(_server_stub_base_class):
     See BaseRpcServer in rpcserver.py for details.
     """
     rpcserver._GetHandlerDecorator(
-        self.SignForApp.im_func,
+        getattr(self.SignForApp, '__func__'),
         SignForAppRequest,
         SignForAppResponse,
         None,
-        'none')
+        'INTEGRITY')
     rpcserver._GetHandlerDecorator(
-        self.GetPublicCertificatesForApp.im_func,
+        getattr(self.GetPublicCertificatesForApp, '__func__'),
         GetPublicCertificateForAppRequest,
         GetPublicCertificateForAppResponse,
         None,
-        'none')
+        'INTEGRITY')
     rpcserver._GetHandlerDecorator(
-        self.GetServiceAccountName.im_func,
+        getattr(self.GetServiceAccountName, '__func__'),
         GetServiceAccountNameRequest,
         GetServiceAccountNameResponse,
         None,
-        'none')
+        'INTEGRITY')
     rpcserver._GetHandlerDecorator(
-        self.GetAccessToken.im_func,
+        getattr(self.GetAccessToken, '__func__'),
         GetAccessTokenRequest,
         GetAccessTokenResponse,
         None,
-        'none')
+        'INTEGRITY')
     rpcserver._GetHandlerDecorator(
-        self.GetDefaultGcsBucketName.im_func,
+        getattr(self.GetDefaultGcsBucketName, '__func__'),
         GetDefaultGcsBucketNameRequest,
         GetDefaultGcsBucketNameResponse,
         None,
-        'none')
+        'INTEGRITY')
 
 if _extension_runtime:
   pass

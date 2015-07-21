@@ -19,11 +19,6 @@
  *
  */
 
-require_once 'google/appengine/api/mail_service_pb.php';
-require_once 'google/appengine/api/mail/AdminMessage.php';
-require_once 'google/appengine/runtime/ApplicationError.php';
-require_once 'google/appengine/testing/ApiProxyTestBase.php';
-
 use google\appengine\api\mail\AdminMessage;
 use google\appengine\base\VoidProto;
 use google\appengine\MailMessage;
@@ -73,6 +68,15 @@ class AdminMessageTest extends ApiProxyTestBase {
     $message->send();
   }
 
+
+  public function testInvalidContentId() {
+    $message = new AdminMessage();
+    $this->setExpectedException(
+        "InvalidArgumentException",
+        "Content-id must begin and end with angle brackets.");
+    $message->addAttachment("foo.jpg", "image data", "invalid content id");
+  }
+
   /**
    * Setup a basic message and message proto with:
    * - sender
@@ -114,22 +118,61 @@ class AdminMessageTest extends ApiProxyTestBase {
     $this->apiProxyMock->verify();
   }
 
-  public function testSucceedWithOptionsArray() {
+  private function makeAttachmentTestOptions() {
     $headers = array('in-reply-to' => 'data',
                      'list-id' => 'data2',
                      'references' => 'data3');
-    $attachments = array('test.gif' => 'data',
-                         't.jpg' => 'data2',
-                         'z.png' => 'data3');
-    $options = array('sender' => 'test@example.com',
-                     'replyto' => 'test@example.com',
-                     'subject' => 'test',
-                     'textBody' => 'text body',
-                     'htmlBody' => 'html body',
-                     'header' => $headers,
-                     'attachment' => $attachments);
+    return array('sender' => 'test@example.com',
+                 'replyto' => 'test@example.com',
+                 'subject' => 'test',
+                 'textBody' => 'text body',
+                 'htmlBody' => 'html body',
+                 'header' => $headers);
+  }
+
+  public function testSucceedWithOptionsArray() {
+    $options = $this->makeAttachmentTestOptions();
+    $options['attachment'] = array('test.gif' => 'data',
+                                    't.jpg' => 'data2',
+                                    'z.png' => 'data3');
 
     $message = new AdminMessage($options);
+    $message_proto = $this->setUpAttachmentMessageProto();
+
+    $response = new VoidProto();
+    $this->apiProxyMock->expectCall(
+        'mail', 'SendToAdmins', $message_proto, $response);
+    $message->send();
+    $this->apiProxyMock->verify();
+  }
+
+  public function testSucceedWithOptionsArrayContentID() {
+    $options = $this->makeAttachmentTestOptions();
+    $options['attachments'] = array(['name' => 'test.gif',
+                                     'data' => 'data'],
+                                    ['name' => 't.jpg',
+                                     'data' => 'data2'],
+                                    ['name' => 'z.png',
+                                     'data' => 'data3'],
+                                    ['name' => 'c.jpg',
+                                     'data' => 'data4',
+                                     'content_id' => '<cid>']);
+    $message = new AdminMessage($options);
+    $message_proto = $this->setUpAttachmentMessageProto();
+    $attach = $message_proto->addAttachment();
+    $attach->setFilename('c.jpg');
+    $attach->setData('data4');
+    $attach->setContentId('<cid>');
+
+    $response = new VoidProto();
+    $this->apiProxyMock->expectCall('mail', 'SendToAdmins',
+                                    $message_proto, $response);
+    $message->send();
+    $this->apiProxyMock->verify();
+  }
+
+
+  private function setUpAttachmentMessageProto() {
     $message_proto = new MailMessage();
 
     $message_proto->setSender("test@example.com");
@@ -158,11 +201,7 @@ class AdminMessageTest extends ApiProxyTestBase {
     $attach->setFilename("z.png");
     $attach->setData("data3");
 
-    $response = new VoidProto();
-    $this->apiProxyMock->expectCall(
-        'mail', 'SendToAdmins', $message_proto, $response);
-    $message->send();
-    $this->apiProxyMock->verify();
+    return $message_proto;
   }
 
   public function testSucceedWithAttachments() {
@@ -184,6 +223,14 @@ class AdminMessageTest extends ApiProxyTestBase {
     $attach = $message_proto->addAttachment();
     $attach->setFilename("z.");
     $attach->setData("data3");
+
+    $message->addAttachmentsArray([["name" => "f.jpg",
+                                    "data" => "data",
+                                    "content_id" => "<cid>"]]);
+    $attach = $message_proto->addAttachment();
+    $attach->setFilename("f.jpg");
+    $attach->setData("data");
+    $attach->setContentId("<cid>");
 
     $response = new VoidProto();
     $this->apiProxyMock->expectCall(

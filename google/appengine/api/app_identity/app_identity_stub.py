@@ -34,7 +34,10 @@ constant values instead of app-specific values:
 
 
 
+
 import binascii
+import logging
+import sys
 import time
 
 try:
@@ -44,6 +47,12 @@ try:
   CRYPTO_LIB_INSTALLED = True
 except ImportError, e:
   CRYPTO_LIB_INSTALLED = False
+
+try:
+  import rsa
+  RSA_LIB_INSTALLED = True
+except ImportError, e:
+  RSA_LIB_INSTALLED = False
 
 from google.appengine.api import apiproxy_stub
 
@@ -107,17 +116,31 @@ class AppIdentityServiceStub(apiproxy_stub.APIProxyStub):
 
   def _Dynamic_SignForApp(self, request, response):
     """Implementation of AppIdentityService::SignForApp."""
-    if not CRYPTO_LIB_INSTALLED:
+    bytes_to_sign = request.bytes_to_sign()
+    if RSA_LIB_INSTALLED:
+
+
+
+
+      signature_bytes = rsa.pkcs1.sign(
+          bytes_to_sign,
+          rsa.key.PrivateKey(N, E, D, 3, 5),
+          'SHA-256')
+    elif CRYPTO_LIB_INSTALLED:
+
+
+      rsa_obj = RSA.construct((N, E, D))
+      hash_obj = SHA256.new()
+      hash_obj.update(bytes_to_sign)
+      padding_length = MODULUS_BYTES - LEN_OF_PREFIX - LENGTH_OF_SHA256_HASH - 3
+      emsa = (HEADER1 + (PADDING * padding_length) + HEADER2 +
+              PREFIX + hash_obj.hexdigest())
+      sig = rsa_obj.sign(binascii.a2b_hex(emsa), '')
+      signature_bytes = number.long_to_bytes(sig[0])
+    else:
       raise NotImplementedError("""Unable to import the pycrypto module,
                                 SignForApp is disabled.""")
-    rsa_obj = RSA.construct((N, E, D))
-    hashObj = SHA256.new()
-    hashObj.update(request.bytes_to_sign())
-    padding_length = MODULUS_BYTES - LEN_OF_PREFIX - LENGTH_OF_SHA256_HASH - 3
-    emsa = (HEADER1 + (PADDING * padding_length) + HEADER2 +
-            PREFIX + hashObj.hexdigest())
-    sig = rsa_obj.sign(binascii.a2b_hex(emsa), '')
-    response.set_signature_bytes(number.long_to_bytes(sig[0]))
+    response.set_signature_bytes(signature_bytes)
     response.set_key_name(SIGNING_KEY_NAME)
 
   def _Dynamic_GetPublicCertificatesForApp(self, request, response):
@@ -150,19 +173,38 @@ class AppIdentityServiceStub(apiproxy_stub.APIProxyStub):
     service_account_id = request.service_account_id()
     if service_account_id:
       token += '.%d' % service_account_id
-    if request.has_service_account_name():
+    if request.service_account_name():
       token += '.%s' % request.service_account_name()
     response.set_access_token('InvalidToken:%s:%s' % (token, time.time() % 100))
 
     response.set_expiration_time(int(time.time()) + 1800)
 
   @staticmethod
-  def Create(email_address=None, private_key_path=None):
+  def Create(email_address=None, private_key_path=None, oauth_url=None):
     if email_address:
       from google.appengine.api.app_identity import app_identity_keybased_stub
 
+      logging.debug('Using the KeyBasedAppIdentityServiceStub.')
       return app_identity_keybased_stub.KeyBasedAppIdentityServiceStub(
           email_address=email_address,
-          private_key_path=private_key_path)
+          private_key_path=private_key_path,
+          oauth_url=oauth_url)
+    elif sys.version_info >= (2, 6):
+      from oauth2client import client
+      from google.appengine.api.app_identity import app_identity_defaultcredentialsbased_stub as ai_stub
+      try:
+        dc = ai_stub.DefaultCredentialsBasedAppIdentityServiceStub()
+        logging.debug('Successfully loaded Application Default Credentials.')
+        return dc
+      except client.ApplicationDefaultCredentialsError, error:
+        if not str(error).startswith('The Application Default Credentials '
+                                     'are not available.'):
+          logging.warning('An exception has been encountered when attempting '
+                          'to use Application Default Credentials: %s'
+                          '. Falling back on dummy AppIdentityServiceStub.',
+                          str(error))
+        return AppIdentityServiceStub()
     else:
+      logging.debug('Running under Python 2.5 uses dummy '
+                    'AppIdentityServiceStub.')
       return AppIdentityServiceStub()

@@ -167,7 +167,7 @@ function memcache_get($memcache_obj, $keys, $flags = null) {
  *
  * @param Memcache $memcache_obj The cache instance to increment the value in.
  *
- * @param string $key The key associated with the value to decrement.
+ * @param string $key The key associated with the value to increment.
  *
  * @param int $value The amount to increment the value.
  *
@@ -338,7 +338,7 @@ class Memcache {
    *               failure, false is returned.
    */
   public function decrement($key, $value = 1) {
-    return $this->increment($key, -$value);
+    return $this->incrementInternal($key, $value, false);
   }
 
   /**
@@ -399,8 +399,12 @@ class Memcache {
 
     $return_value = array();
     foreach ($response->getItemList() as $item) {
-      $return_value[$item->getKey()] = MemcacheUtils::deserializeValue(
-          $item->getValue(), $item->getFlags());
+      try {
+        $return_value[$item->getKey()] = MemcacheUtils::deserializeValue(
+            $item->getValue(), $item->getFlags());
+      } catch (\UnexpectedValueException $e) {
+        // Skip entries that cannot be deserialized.
+      }
     }
     return $return_value;
   }
@@ -450,7 +454,7 @@ class Memcache {
    * Increments a cached item's value. The value must be a int, float or string
    * representing an integer e.g. 5, 5.0 or "5" or the call with fail.
    *
-   * @param string $key The key associated with the value to decrement.
+   * @param string $key The key associated with the value to increment.
    *
    * @param int $value The amount to increment the value.
    *
@@ -458,6 +462,22 @@ class Memcache {
    *               failure, false is returned.
    */
   public function increment($key, $value = 1) {
+    return $this->incrementInternal($key, $value, true);
+  }
+
+  /**
+   * Internal implementation of increment (and decrement).
+   *
+   * @param string $key The key associated with the value to increment.
+   *
+   * @param int $value The amount to increment the value.
+   *
+   * @param bool $is_incr Whether to perform an increment or decrement.
+   *
+   * @return mixed On success, the new value of the item is returned. On
+   *               failure, false is returned.
+   */
+  private function incrementInternal($key, $value, $is_incr) {
     // Sending of a key of 'null' or an unset value is a failure.
     if (is_null($key)) {
       return false;
@@ -467,6 +487,9 @@ class Memcache {
     $response = new MemcacheIncrementResponse();
     $request->setKey($key);
     $request->setDelta($value);
+    if (!$is_incr) {
+      $request->setDirection(MemcacheIncrementRequest\Direction::DECREMENT);
+    }
 
     try {
       ApiProxy::makeSyncCall('memcache', 'Increment', $request, $response);

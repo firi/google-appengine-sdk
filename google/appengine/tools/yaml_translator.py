@@ -21,32 +21,33 @@
   AppYamlTranslator: Class that facilitates xml-to-yaml translation
 """
 
+import os
+import re
+
 from google.appengine.tools import app_engine_web_xml_parser as aewxp
-from google.appengine.tools import backends_xml_parser
 from google.appengine.tools import handler_generator
-from google.appengine.tools import web_xml_parser
 from google.appengine.tools.app_engine_web_xml_parser import AppEngineConfigException
 
 
 NO_API_VERSION = 'none'
 
 
-def TranslateXmlToYaml(app_engine_web_xml_str,
-                       backends_xml_str,
-                       web_xml_str,
-                       static_files,
-                       api_version):
-  """Does xml-string to yaml-string translation, given each separate file text.
+def TranslateXmlToYamlForDevAppServer(app_engine_web_xml,
+                                      web_xml,
+                                      war_root):
+  """Does parsed-XML to YAML-string translation.
 
-  Processes each xml string into an object representing the xml,
-  and passes these to the translator.
+  This method is used in the Dev App Server context, where files are served
+  directly from the input war directory, unlike the appcfg case where they are
+  copied or linked into a parallel hierarchy.  This means that there is no
+  __static__ directory containing exactly the files that are supposed to be
+  served statically.
 
   Args:
-    app_engine_web_xml_str: text from app_engine_web.xml
-    backends_xml_str: text from backends.xml
-    web_xml_str: text from web.xml
-    static_files: List of static files
-    api_version: current api version
+    app_engine_web_xml: parsed AppEngineWebXml object corresponding to the
+      contents of app-engine.web.xml.
+    web_xml: parsed WebXml object corresponding to the contents of web.xml.
+    war_root: the path to the root directory of the war hierarchy
 
   Returns:
     The full text of the app.yaml generated from the xml files.
@@ -54,20 +55,9 @@ def TranslateXmlToYaml(app_engine_web_xml_str,
   Raises:
     AppEngineConfigException: raised in processing stage for illegal XML.
   """
-  aewx_parser = aewxp.AppEngineWebXmlParser()
-  backends_parser = backends_xml_parser.BackendsXmlParser()
-  web_parser = web_xml_parser.WebXmlParser()
-  app_engine_web_xml = aewx_parser.ProcessXml(app_engine_web_xml_str)
-  backends_xml = backends_parser.ProcessXml(backends_xml_str)
-  web_xml = web_parser.ProcessXml(web_xml_str)
-  translator = AppYamlTranslator(
-      app_engine_web_xml, backends_xml, web_xml, static_files, api_version)
+  translator = AppYamlTranslatorForDevAppServer(
+      app_engine_web_xml, web_xml, war_root)
   return translator.GetYaml()
-
-
-def GetRuntime():
-
-  return 'java7'
 
 
 class AppYamlTranslator(object):
@@ -76,21 +66,21 @@ class AppYamlTranslator(object):
   Attributes:
     app_engine_web_xml: AppEngineWebXml object containing relevant information
       from appengine-web.xml
-    backends_xml: BackendsXml object containing relevant info from backends.xml
   """
 
   def __init__(self,
                app_engine_web_xml,
-               backends_xml,
                web_xml,
                static_files,
                api_version):
 
     self.app_engine_web_xml = app_engine_web_xml
-    self.backends_xml = backends_xml
     self.web_xml = web_xml
     self.static_files = static_files
     self.api_version = api_version
+
+  def GetRuntime(self):
+    return 'java7'
 
   def GetYaml(self):
     """Returns full yaml text."""
@@ -104,9 +94,13 @@ class AppYamlTranslator(object):
     stmnt_list += self.TranslateAdminConsolePages()
     stmnt_list += self.TranslateApiConfig()
     stmnt_list += self.TranslatePagespeed()
+    stmnt_list += self.TranslateEnvVariables()
+    stmnt_list += self.TranslateBetaSettings()
     stmnt_list += self.TranslateVmSettings()
+    stmnt_list += self.TranslateHealthCheck()
+    stmnt_list += self.TranslateResources()
+    stmnt_list += self.TranslateNetwork()
     stmnt_list += self.TranslateErrorHandlers()
-    stmnt_list += self.TranslateBackendsXml()
     stmnt_list += self.TranslateApiVersion()
     stmnt_list += self.TranslateHandlers()
     return '\n'.join(stmnt_list) + '\n'
@@ -127,7 +121,7 @@ class AppYamlTranslator(object):
         basic_statements.append(
             '%s: %s' % (entry_name, self.SanitizeForYaml(field)))
     for entry_name, field in [
-        ('runtime', GetRuntime()),
+        ('runtime', self.GetRuntime()),
         ('vm', self.app_engine_web_xml.vm),
         ('threadsafe', self.app_engine_web_xml.threadsafe),
         ('instance_class', self.app_engine_web_xml.instance_class),
@@ -211,18 +205,96 @@ class AppYamlTranslator(object):
         statements += ['  - %s' % url for url in urls]
     return statements
 
-  def TranslateVmSettings(self):
-    """Translates VM settings in appengine-web.xml to yaml."""
-    if (not self.app_engine_web_xml.vm or
-        not self.app_engine_web_xml.vm_settings):
+  def TranslateEnvVariables(self):
+    if not self.app_engine_web_xml.env_variables:
       return []
 
-    settings = self.app_engine_web_xml.vm_settings
+    variables = self.app_engine_web_xml.env_variables
+    statements = ['env_variables:']
+    for name, value in sorted(variables.iteritems()):
+      statements.append(
+          '  %s: %s' % (
+              self.SanitizeForYaml(name), self.SanitizeForYaml(value)))
+    return statements
+
+  def TranslateBetaSettings(self):
+    """Translates Beta settings in appengine-web.xml to yaml."""
+    if not self.app_engine_web_xml.vm:
+      return []
+
+    settings = self.app_engine_web_xml.beta_settings or {}
+    if 'java_quickstart' in settings:
+
+      del settings['java_quickstart']
+    statements = []
+    if settings:
+      statements = ['beta_settings:']
+      for name in sorted(settings):
+        statements.append(
+            '  %s: %s' % (
+                self.SanitizeForYaml(name),
+                self.SanitizeForYaml(settings[name])))
+    return statements
+
+  def TranslateVmSettings(self):
+    """Translates VM settings in appengine-web.xml to yaml."""
+    if not self.app_engine_web_xml.vm:
+      return []
+
+    settings = self.app_engine_web_xml.vm_settings or {}
+    settings['has_docker_image'] = 'True'
     statements = ['vm_settings:']
     for name in sorted(settings):
       statements.append(
           '  %s: %s' % (
               self.SanitizeForYaml(name), self.SanitizeForYaml(settings[name])))
+    return statements
+
+  def TranslateHealthCheck(self):
+    """Translates <health-check> in appengine-web.xml to yaml."""
+    health_check = self.app_engine_web_xml.health_check
+    if not health_check:
+      return []
+
+    statements = ['health_check:']
+    for attr in ('enable_health_check', 'check_interval_sec', 'timeout_sec',
+                 'unhealthy_threshold', 'healthy_threshold',
+                 'restart_threshold', 'host'):
+      value = getattr(health_check, attr, None)
+      if value is not None:
+        statements.append('  %s: %s' % (attr, value))
+    return statements
+
+  def TranslateResources(self):
+    """Translates <resources> in appengine-web.xml to yaml."""
+    resources = self.app_engine_web_xml.resources
+    if not resources:
+      return []
+
+    statements = ['resources:']
+    for attr in ('cpu', 'memory_gb', 'disk_size_gb'):
+      value = getattr(resources, attr, None)
+      if value is not None:
+        statements.append('  %s: %s' % (attr, value))
+    return statements
+
+  def TranslateNetwork(self):
+    """Translates <network> in appengine-web.xml to yaml."""
+    network = self.app_engine_web_xml.network
+    if not network:
+      return []
+
+    statements = ['network:']
+    for attr in ('instance_tag', 'name'):
+      value = getattr(network, attr, None)
+      if value is not None:
+        statements.append('  %s: %s' % (attr, value))
+
+    forwarded_ports = getattr(network, 'forwarded_ports', None)
+    if forwarded_ports is not None:
+      statements.append('  forwarded_ports:')
+      for port in forwarded_ports:
+        statements.append('  - ' + port)
     return statements
 
   def TranslateInboundServices(self):
@@ -241,42 +313,39 @@ class AppYamlTranslator(object):
       return []
     statements = ['error_handlers:']
     for error_handler in self.app_engine_web_xml.static_error_handlers:
-      name = error_handler.name
-      if not name.startswith('/'):
-        name = '/' + name
 
-      if ('__static__' + name) not in self.static_files:
-        raise AppEngineConfigException(
-            'No static file found for error handler: %s, out of %s' %
-            (name, self.static_files))
-      statements.append('- file: __static__%s' % name)
+      path = self.ErrorHandlerPath(error_handler)
+      statements.append('- file: %s' % path)
       if error_handler.code:
         statements.append('  error_code: %s' % error_handler.code)
-      mime_type = self.web_xml.GetMimeTypeForPath(name)
+      mime_type = self.web_xml.GetMimeTypeForPath(error_handler.name)
       if mime_type:
         statements.append('  mime_type: %s' % mime_type)
 
     return statements
 
-  def TranslateBackendsXml(self):
-    """Translates backends.xml backends settings to yaml."""
-    if not self.backends_xml:
-      return []
-    statements = ['backends:']
+  def ErrorHandlerPath(self, error_handler):
+    """Returns the relative path name for the given error handler.
 
-    for backend in self.backends_xml:
-      statements.append('- name: %s' % backend.name)
-      for entry, field in [('instances', backend.instances),
-                           ('instance_class', backend.instance_class),
-                           ('max_concurrent_requests',
-                            backend.max_concurrent_requests)]:
-        if field is not None:
-          statements.append('  %s: %s' % (entry, str(field)))
+    Args:
+      error_handler: an app_engine_web_xml.ErrorHandler.
 
-      if backend.options:
-        options_str = ', '.join(sorted(list(backend.options)))
-        statements.append('  options: %s' % options_str)
-    return statements
+    Returns:
+      the relative path name for the handler.
+
+    Raises:
+      AppEngineConfigException: if the named file is not an existing static
+        file.
+    """
+    name = error_handler.name
+    if not name.startswith('/'):
+      name = '/' + name
+    path = '__static__' + name
+    if path not in self.static_files:
+      raise AppEngineConfigException(
+          'No static file found for error handler: %s, out of %s' %
+          (name, self.static_files))
+    return path
 
   def TranslateHandlers(self):
     return handler_generator.GenerateYamlHandlersList(
@@ -286,12 +355,161 @@ class AppYamlTranslator(object):
 
   def VerifyRequiredEntriesPresent(self):
     required = {
-        'app_id': self.app_engine_web_xml.app_id,
-        'version_id': self.app_engine_web_xml.version_id,
-        'runtime': GetRuntime(),
+        'runtime': self.GetRuntime(),
         'threadsafe': self.app_engine_web_xml.threadsafe_value_provided,
     }
     missing = [field for (field, value) in required.items() if not value]
     if missing:
       raise AppEngineConfigException('Missing required fields: %s' %
                                      ', '.join(missing))
+
+
+def _XmlPatternToRegEx(xml_pattern):
+  r"""Translates an appengine-web.xml pattern into a regular expression.
+
+  Specially, this applies to the patterns that appear in the <include> and
+  <exclude> elements inside <static-files>. They look like '/**.png' or
+  '/stylesheets/*.css', and are translated into expressions like
+  '^/.*\.png$' or '^/stylesheets/.*\.css$'.
+
+  Args:
+    xml_pattern: a string like '/**.png'
+
+  Returns:
+    a compiled regular expression like re.compile('^/.*\.png$').
+  """
+  result = ['^']
+  while xml_pattern:
+    if xml_pattern.startswith('**'):
+      result.append(r'.*')
+      xml_pattern = xml_pattern[1:]
+    elif xml_pattern.startswith('*'):
+      result.append(r'[^/]*')
+    elif xml_pattern.startswith('/'):
+
+
+      result.append('/')
+    else:
+      result.append(re.escape(xml_pattern[0]))
+    xml_pattern = xml_pattern[1:]
+  result.append('$')
+  return re.compile(''.join(result))
+
+
+class AppYamlTranslatorForDevAppServer(AppYamlTranslator):
+  """Subclass of AppYamlTranslator specialized for the Dev App Server case.
+
+  The key difference is that static files are served directly from the war
+  directory, which means that the app.yaml patterns we define must cover
+  exactly those files in that directory hierarchy that are supposed to be static
+  while not covering any files that are not supposed to be static.
+
+  Attributes:
+    war_root: the root directory of the war hierarchy.
+    static_urls: a list of two-item tuples where the first item is a URL that
+      should be served statically and the second item corresponds to the
+      <include> element that caused that URL to be included.
+  """
+
+  def __init__(self,
+               app_engine_web_xml,
+               web_xml,
+               war_root):
+    super(AppYamlTranslatorForDevAppServer, self).__init__(
+        app_engine_web_xml, web_xml, [], '1.0')
+    self.war_root = war_root
+    self.static_urls = self.IncludedStaticUrls()
+
+  def IncludedStaticUrls(self):
+    """Returns the URLs that should be resolved statically for this app.
+
+    The result includes a URL for every file in the war hierarchy that is
+    covered by one of the <include> elements for <static-files> and not covered
+    by any of the <exclude> elements.
+
+    Returns:
+      a list of two-item tuples where the first item is a URL that should be
+      served statically and the second item corresponds to the <include>
+      element that caused that URL to be included.
+    """
+
+
+
+
+
+
+    includes = self.app_engine_web_xml.static_file_includes
+    if not includes:
+
+
+
+      includes = [aewxp.StaticFileInclude('**', None, {})]
+    excludes = self.app_engine_web_xml.static_file_excludes
+    files = os.listdir(self.war_root)
+    web_inf_name = os.path.normcase('WEB-INF')
+    files = [f for f in files if os.path.normcase(f) != web_inf_name]
+    static_urls = []
+    includes_and_res = [(include, _XmlPatternToRegEx(include.pattern))
+                        for include in includes]
+    exclude_res = [_XmlPatternToRegEx(exclude) for exclude in excludes]
+    self.ComputeIncludedStaticUrls(
+        static_urls, self.war_root, '/', files, includes_and_res, exclude_res)
+    return static_urls
+
+
+
+
+  def ComputeIncludedStaticUrls(
+      self,
+      static_urls, dirpath, url_prefix, files, includes_and_res, exclude_res):
+    """Compute the URLs that should be resolved statically.
+
+    This recursive method is called for the war directory and every
+    subdirectory except the top-level WEB-INF directory. If we have arrived
+    at the directory <war-root>/foo/bar then dirpath will be <war-root>/foo/bar
+    and url_prefix will be /foo/bar.
+
+    Args:
+      static_urls: a list to be filled with the result, two-item tuples where
+        the first item is a URL and the second is a parsed <include> element.
+      dirpath: the path to the directory inside the war hierarchy that we have
+        reached at this point in the recursion.
+      url_prefix: the URL prefix that we have reached at this point in the
+        recursion.
+      files: the contents of the dirpath directory, minus the WEB-INF directory
+        if dirpath is the war directory itself.
+      includes_and_res: a list of two-item tuples where the first item is a
+        parsed <include> element and the second item is a compiled regular
+        expression corresponding to the path= pattern from that element.
+      exclude_res: a list of compiled regular expressions corresponding to the
+        path= patterns from <exclude> elements.
+    """
+    for f in files:
+      path = os.path.join(dirpath, f)
+      if os.path.isfile(path):
+        url = url_prefix + f
+        if not any(exclude_re.search(url) for exclude_re in exclude_res):
+          for include, include_re in includes_and_res:
+            if include_re.search(url):
+              static_urls.append((url, include))
+              break
+      else:
+        self.ComputeIncludedStaticUrls(
+            static_urls, path, url_prefix + f + '/', os.listdir(path),
+            includes_and_res, exclude_res)
+
+  def TranslateHandlers(self):
+    return handler_generator.GenerateYamlHandlersListForDevAppServer(
+        self.app_engine_web_xml,
+        self.web_xml,
+        self.static_urls)
+
+  def ErrorHandlerPath(self, error_handler):
+    name = error_handler.name
+    if name.startswith('/'):
+      name = name[1:]
+    if name not in self.static_files:
+      raise AppEngineConfigException(
+          'No static file found for error handler: %s, out of %s' %
+          (name, self.static_files))
+    return name

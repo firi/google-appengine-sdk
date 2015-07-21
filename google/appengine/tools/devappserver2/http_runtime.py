@@ -30,32 +30,51 @@ delete the file after reading it. The second file is written by the runtime
 instance with the port it is listening on (the line must be newline terminated);
 http_runtime is expected to delete the file after reading it.
 
-TODO: convert all runtimes to START_PROCESS_FILE.
+START_PROCESS_REVERSE Works by passing config in via a file and passes the HTTP
+port number created in http_runtime.py as an environment variable to the runtime
+process.
+
+START_PROCESS_REVERSE_NO_FILE equivalent to START_PROCESS, but passes the HTTP
+port number created in http_runtime.py as an environment variable to the runtime
+process.
+
 """
 
 
+
 import base64
-import contextlib
-import httplib
 import logging
 import os
-import socket
 import subprocess
 import sys
-import time
 import threading
-import urllib
-import wsgiref.headers
+import time
 
+import portpicker
+
+from google.appengine.tools.devappserver2 import application_configuration
+from google.appengine.tools.devappserver2 import http_proxy
 from google.appengine.tools.devappserver2 import http_runtime_constants
 from google.appengine.tools.devappserver2 import instance
-from google.appengine.tools.devappserver2 import login
 from google.appengine.tools.devappserver2 import safe_subprocess
 from google.appengine.tools.devappserver2 import tee
-from google.appengine.tools.devappserver2 import util
 
+# These are different approaches to passing configuration into the runtimes
+# and getting configuration back out of the runtime.
+
+# Works by passing config in via stdin and reading the port over stdout.
 START_PROCESS = -1
+
+# Works by passing config in via a file and reading the port over a file.
 START_PROCESS_FILE = -2
+
+# Works by passing config in via a file and passes the port via
+# a command line flag.
+START_PROCESS_REVERSE = -3
+
+# Works by passing config in via stdin and passes the port in via
+# an environment variable.
+START_PROCESS_REVERSE_NO_FILE = -4
 
 
 def _sleep_between_retries(attempt, max_attempts, sleep_base):
@@ -114,13 +133,59 @@ def _remove_retry_sharing_violation(path, max_attempts=10, sleep_base=.125):
     os.remove(path)
 
 
+def get_vm_environment_variables(module_configuration, runtime_config):
+  """Returns VM-specific environment variables."""
+  keys_values = [
+      ('API_HOST', runtime_config.api_host),
+      ('API_PORT', runtime_config.api_port),
+      ('GAE_LONG_APP_ID', module_configuration.application_external_name),
+      ('GAE_PARTITION', module_configuration.partition),
+      ('GAE_MODULE_NAME', module_configuration.module_name),
+      ('GAE_MODULE_VERSION', module_configuration.major_version),
+      ('GAE_MINOR_VERSION', module_configuration.minor_version),
+      ('GAE_MODULE_INSTANCE', runtime_config.instance_id),
+      ('GAE_SERVER_PORT', runtime_config.server_port),
+      ('MODULE_YAML_PATH', os.path.basename(module_configuration.config_path)),
+      ('SERVER_SOFTWARE', http_runtime_constants.SERVER_SOFTWARE),
+  ]
+  for entry in runtime_config.environ:
+    keys_values.append((entry.key, entry.value))
+
+  return {key: str(value) for key, value in keys_values}
+
+
 class HttpRuntimeProxy(instance.RuntimeProxy):
   """Manages a runtime subprocess used to handle dynamic content."""
 
-  _VALID_START_PROCESS_FLAVORS = [START_PROCESS, START_PROCESS_FILE]
+  _VALID_START_PROCESS_FLAVORS = [START_PROCESS, START_PROCESS_FILE,
+                                  START_PROCESS_REVERSE,
+                                  START_PROCESS_REVERSE_NO_FILE]
+
+  # TODO: Determine if we can always use SIGTERM.
+  # Set this to True to quit with SIGTERM rather than SIGKILL
+
+
+
+
+  _quit_with_sigterm = False
+
+  @classmethod
+  def stop_runtimes_with_sigterm(cls, quit_with_sigterm):
+    """Configures the http_runtime module to kill the runtimes with SIGTERM.
+
+    Args:
+      quit_with_sigterm: True to enable stopping runtimes with SIGTERM.
+
+    Returns:
+      The previous value.
+    """
+    previous_quit_with_sigterm = cls._quit_with_sigterm
+    cls._quit_with_sigterm = quit_with_sigterm
+    return previous_quit_with_sigterm
 
   def __init__(self, args, runtime_config_getter, module_configuration,
-               env=None, start_process_flavor=START_PROCESS):
+               env=None, start_process_flavor=START_PROCESS,
+               extra_args_getter=None):
     """Initializer for HttpRuntimeProxy.
 
     Args:
@@ -133,34 +198,50 @@ class HttpRuntimeProxy(instance.RuntimeProxy):
           runtime.
       env: A dict of environment variables to pass to the runtime subprocess.
       start_process_flavor: Which version of start process to start your
-        runtime process. SUpported flavors are START_PROCESS and
-        START_PROCESS_FILE.
+        runtime process. Supported flavors are START_PROCESS, START_PROCESS_FILE
+        START_PROCESS_REVERSE and START_PROCESS_REVERSE_NO_FILE
+      extra_args_getter: A function that can be called with a port number picked
+          by this http_runtime,
+          and returns the extra command line parameter that refers to the port
+          number.
 
     Raises:
       ValueError: An unknown value for start_process_flavor was used.
     """
     super(HttpRuntimeProxy, self).__init__()
-    self._host = 'localhost'
-    self._port = None
     self._process = None
     self._process_lock = threading.Lock()  # Lock to guard self._process.
-    self._prior_error = None
     self._stderr_tee = None
     self._runtime_config_getter = runtime_config_getter
+    self._extra_args_getter = extra_args_getter
     self._args = args
     self._module_configuration = module_configuration
     self._env = env
+    # This sets environment variables at the process level and works for
+    # Java and Go. Python hacks os.environ to not really return the environment
+    # variables, so Python needs to set these elsewhere.
+    runtime_config = self._runtime_config_getter()
+    if runtime_config.vm:
+      self._env.update(get_vm_environment_variables(
+          self._module_configuration, runtime_config))
+
     if start_process_flavor not in self._VALID_START_PROCESS_FLAVORS:
       raise ValueError('Invalid start_process_flavor.')
     self._start_process_flavor = start_process_flavor
+    self._proxy = None
 
-  def _get_error_file(self):
-    for error_handler in self._module_configuration.error_handlers or []:
-      if not error_handler.error_code or error_handler.error_code == 'default':
-        return os.path.join(self._module_configuration.application_root,
-                            error_handler.file)
-    else:
-      return None
+  def _get_instance_logs(self):
+    # Give the runtime process a bit of time to write to stderr.
+    time.sleep(0.1)
+    return self._stderr_tee.get_buf()
+
+  def _instance_died_unexpectedly(self):
+    with self._process_lock:
+      # If self._process is None then the process hasn't started yet, so it
+      # it hasn't died either. Otherwise, if self._process.poll() returns a
+      # non-None value then the process has exited and the poll() value is
+      # its return code.
+      return self._process and self._process.poll() is not None
 
   def handle(self, environ, start_response, url_map, match, request_id,
              request_type):
@@ -179,145 +260,9 @@ class HttpRuntimeProxy(instance.RuntimeProxy):
     Yields:
       A sequence of strings containing the body of the HTTP response.
     """
-    if self._prior_error:
-      yield self._handle_error(self._prior_error, start_response)
-      return
 
-    environ[http_runtime_constants.SCRIPT_HEADER] = match.expand(url_map.script)
-    if request_type == instance.BACKGROUND_REQUEST:
-      environ[http_runtime_constants.REQUEST_TYPE_HEADER] = 'background'
-    elif request_type == instance.SHUTDOWN_REQUEST:
-      environ[http_runtime_constants.REQUEST_TYPE_HEADER] = 'shutdown'
-    elif request_type == instance.INTERACTIVE_REQUEST:
-      environ[http_runtime_constants.REQUEST_TYPE_HEADER] = 'interactive'
-
-    for name in http_runtime_constants.ENVIRONS_TO_PROPAGATE:
-      if http_runtime_constants.INTERNAL_ENVIRON_PREFIX + name not in environ:
-        value = environ.get(name, None)
-        if value is not None:
-          environ[
-              http_runtime_constants.INTERNAL_ENVIRON_PREFIX + name] = value
-    headers = util.get_headers_from_environ(environ)
-    if environ.get('QUERY_STRING'):
-      url = '%s?%s' % (urllib.quote(environ['PATH_INFO']),
-                       environ['QUERY_STRING'])
-    else:
-      url = urllib.quote(environ['PATH_INFO'])
-    if 'CONTENT_LENGTH' in environ:
-      headers['CONTENT-LENGTH'] = environ['CONTENT_LENGTH']
-      data = environ['wsgi.input'].read(int(environ['CONTENT_LENGTH']))
-    else:
-      data = ''
-
-    cookies = environ.get('HTTP_COOKIE')
-    user_email, admin, user_id = login.get_user_info(cookies)
-    if user_email:
-      nickname, organization = user_email.split('@', 1)
-    else:
-      nickname = ''
-      organization = ''
-    headers[http_runtime_constants.REQUEST_ID_HEADER] = request_id
-    headers[http_runtime_constants.INTERNAL_HEADER_PREFIX + 'User-Id'] = (
-        user_id)
-    headers[http_runtime_constants.INTERNAL_HEADER_PREFIX + 'User-Email'] = (
-        user_email)
-    headers[
-        http_runtime_constants.INTERNAL_HEADER_PREFIX + 'User-Is-Admin'] = (
-            str(int(admin)))
-    headers[
-        http_runtime_constants.INTERNAL_HEADER_PREFIX + 'User-Nickname'] = (
-            nickname)
-    headers[
-        http_runtime_constants.INTERNAL_HEADER_PREFIX + 'User-Organization'] = (
-            organization)
-    headers['X-AppEngine-Country'] = 'ZZ'
-    connection = httplib.HTTPConnection(self._host, self._port)
-    with contextlib.closing(connection):
-      try:
-        connection.connect()
-        connection.request(environ.get('REQUEST_METHOD', 'GET'),
-                           url,
-                           data,
-                           dict(headers.items()))
-
-        try:
-          response = connection.getresponse()
-        except httplib.HTTPException as e:
-          # The runtime process has written a bad HTTP response. For example,
-          # a Go runtime process may have crashed in app-specific code.
-          yield self._handle_error(
-              'the runtime process gave a bad HTTP response: %s' % e,
-              start_response)
-          return
-
-        # Ensures that we avoid merging repeat headers into a single header,
-        # allowing use of multiple Set-Cookie headers.
-        headers = []
-        for name in response.msg:
-          for value in response.msg.getheaders(name):
-            headers.append((name, value))
-
-        response_headers = wsgiref.headers.Headers(headers)
-
-        error_file = self._get_error_file()
-        if (error_file and
-            http_runtime_constants.ERROR_CODE_HEADER in response_headers):
-          try:
-            with open(error_file) as f:
-              content = f.read()
-          except IOError:
-            content = 'Failed to load error handler'
-            logging.exception('failed to load error file: %s', error_file)
-          start_response('500 Internal Server Error',
-                         [('Content-Type', 'text/html'),
-                          ('Content-Length', str(len(content)))])
-          yield content
-          return
-        del response_headers[http_runtime_constants.ERROR_CODE_HEADER]
-        start_response('%s %s' % (response.status, response.reason),
-                       response_headers.items())
-
-        # Yield the response body in small blocks.
-        while True:
-          try:
-            block = response.read(512)
-            if not block:
-              break
-            yield block
-          except httplib.HTTPException:
-            # The runtime process has encountered a problem, but has not
-            # necessarily crashed. For example, a Go runtime process' HTTP
-            # handler may have panicked in app-specific code (which the http
-            # package will recover from, so the process as a whole doesn't
-            # crash). At this point, we have already proxied onwards the HTTP
-            # header, so we cannot retroactively serve a 500 Internal Server
-            # Error. We silently break here; the runtime process has presumably
-            # already written to stderr (via the Tee).
-            break
-      except Exception:
-        with self._process_lock:
-          if self._process and self._process.poll() is not None:
-            # The development server is in a bad state. Log and return an error
-            # message.
-            self._prior_error = ('the runtime process for the instance running '
-                                 'on port %d has unexpectedly quit' % (
-                                     self._port))
-            yield self._handle_error(self._prior_error, start_response)
-          else:
-            raise
-
-  def _handle_error(self, message, start_response):
-    # Give the runtime process a bit of time to write to stderr.
-    time.sleep(0.1)
-    buf = self._stderr_tee.get_buf()
-    if buf:
-      message = message + '\n\n' + buf
-    # TODO: change 'text/plain' to 'text/plain; charset=utf-8'
-    # throughout devappserver2.
-    start_response('500 Internal Server Error',
-                   [('Content-Type', 'text/plain'),
-                    ('Content-Length', str(len(message)))])
-    return message
+    return self._proxy.handle(environ, start_response, url_map, match,
+                              request_id, request_type)
 
   def _read_start_process_file(self, max_attempts=10, sleep_base=.125):
     """Read the single line response expected in the start process file.
@@ -377,7 +322,7 @@ class HttpRuntimeProxy(instance.RuntimeProxy):
             stderr=subprocess.PIPE,
             env=self._env,
             cwd=self._module_configuration.application_root)
-      line = self._process.stdout.readline()
+      port = self._process.stdout.readline()
     elif self._start_process_flavor == START_PROCESS_FILE:
       serialized_config = runtime_config.SerializeToString()
       with self._process_lock:
@@ -388,42 +333,71 @@ class HttpRuntimeProxy(instance.RuntimeProxy):
             env=self._env,
             cwd=self._module_configuration.application_root,
             stderr=subprocess.PIPE)
-      line = self._read_start_process_file()
+      port = self._read_start_process_file()
       _remove_retry_sharing_violation(self._process.child_out.name)
+    elif self._start_process_flavor == START_PROCESS_REVERSE:
+      serialized_config = runtime_config.SerializeToString()
+      with self._process_lock:
+        assert not self._process, 'start() can only be called once'
+        port = portpicker.PickUnusedPort()
+        self._env['PORT'] = str(port)
+
+        # If any of the strings in args contain {port}, replace that substring
+        # with the selected port. This allows a user-specified runtime to
+        # pass the port along to the subprocess as a command-line argument.
+        args = [arg.replace('{port}', str(port)) for arg in self._args]
+
+        self._process = safe_subprocess.start_process_file(
+            args=args,
+            input_string=serialized_config,
+            env=self._env,
+            cwd=self._module_configuration.application_root,
+            stderr=subprocess.PIPE)
+    elif self._start_process_flavor == START_PROCESS_REVERSE_NO_FILE:
+      serialized_config = runtime_config.SerializeToString()
+      with self._process_lock:
+        assert not self._process, 'start() can only be called once'
+        port = portpicker.PickUnusedPort()
+        self._args.append(self._extra_args_getter(port))
+        self._process = safe_subprocess.start_process(
+            self._args,
+            input_string=serialized_config,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=self._env,
+            cwd=self._module_configuration.application_root)
 
     # _stderr_tee may be pre-set by unit tests.
     if self._stderr_tee is None:
       self._stderr_tee = tee.Tee(self._process.stderr, sys.stderr)
       self._stderr_tee.start()
-    self._prior_error = None
-    self._port = None
-    try:
-      self._port = int(line)
-    except ValueError:
-      self._prior_error = 'bad runtime process port [%r]' % line
-      logging.error(self._prior_error)
-    else:
-      # Check if the runtime can serve requests.
-      if not self._can_connect():
-        self._prior_error = 'cannot connect to runtime on port %r' % self._port
-        logging.error(self._prior_error)
 
-  def _can_connect(self):
-    connection = httplib.HTTPConnection(self._host, self._port)
-    with contextlib.closing(connection):
-      try:
-        connection.connect()
-      except socket.error:
-        return False
-      else:
-        return True
+    error = None
+    try:
+      port = int(port)
+    except ValueError:
+      error = 'bad runtime process port [%r]' % port
+      logging.error(error)
+    finally:
+      self._proxy = http_proxy.HttpProxy(
+          host='localhost', port=port,
+          instance_died_unexpectedly=self._instance_died_unexpectedly,
+          instance_logs_getter=self._get_instance_logs,
+          error_handler_file=application_configuration.get_app_error_file(
+              self._module_configuration),
+          prior_error=error)
+      self._proxy.wait_for_connection()
 
   def quit(self):
     """Causes the runtime process to exit."""
     with self._process_lock:
       assert self._process, 'module was not running'
       try:
-        self._process.kill()
+        if HttpRuntimeProxy._quit_with_sigterm:
+          logging.debug('Calling process.terminate on child runtime.')
+          self._process.terminate()
+        else:
+          self._process.kill()
       except OSError:
         pass
       # Mac leaks file descriptors without call to join. Suspect a race

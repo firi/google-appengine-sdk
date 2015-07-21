@@ -21,6 +21,7 @@ module is the sandboxed version.
 """
 
 
+
 import cStringIO
 import os
 import sys
@@ -40,6 +41,7 @@ from google.appengine.runtime import background
 from google.appengine.runtime import request_environment
 from google.appengine.runtime import runtime
 from google.appengine.runtime import shutdown
+from google.appengine.tools.devappserver2 import environ_utils
 from google.appengine.tools.devappserver2 import http_runtime_constants
 from google.appengine.tools.devappserver2.python import request_state
 
@@ -47,6 +49,14 @@ from google.appengine.tools.devappserver2.python import request_state
 # Copied from httplib; done so we don't have to import httplib which breaks
 # our httplib "forwarder" as the environment variable that controls which
 # implementation we get is not yet set.
+
+
+
+
+
+
+
+
 
 httplib_responses = {
     100: 'Continue',
@@ -95,6 +105,7 @@ httplib_responses = {
     504: 'Gateway Timeout',
     505: 'HTTP Version Not Supported',
 }
+
 
 class RequestHandler(object):
   """A WSGI application that forwards requests to a user-provided app."""
@@ -235,7 +246,7 @@ class RequestHandler(object):
       A dict containing the environ representing an HTTP request.
     """
     user_environ = self.environ_template.copy()
-    self.copy_headers(environ, user_environ)
+    environ_utils.propagate_environs(environ, user_environ)
     user_environ['REQUEST_METHOD'] = environ.get('REQUEST_METHOD', 'GET')
     content_type = environ.get('CONTENT_TYPE')
     if content_type:
@@ -245,27 +256,6 @@ class RequestHandler(object):
       user_environ['HTTP_CONTENT_LENGTH'] = content_length
     return user_environ
 
-  def copy_headers(self, source_environ, dest_environ):
-    """Copy headers from source_environ to dest_environ.
-
-    This extracts headers that represent environ values and propagates all
-    other headers which are not used for internal implementation details or
-    headers that are stripped.
-
-    Args:
-      source_environ: The source environ dict.
-      dest_environ: The environ dict to populate.
-    """
-    for env in http_runtime_constants.ENVIRONS_TO_PROPAGATE:
-      value = source_environ.get(
-          http_runtime_constants.INTERNAL_ENVIRON_PREFIX + env, None)
-      if value is not None:
-        dest_environ[env] = value
-    for name, value in source_environ.items():
-      if (name.startswith('HTTP_') and
-          not name.startswith(http_runtime_constants.INTERNAL_ENVIRON_PREFIX)):
-        dest_environ[name] = value
-
   def _flush_logs(self, logs):
     """Flushes logs using the LogService API.
 
@@ -273,10 +263,14 @@ class RequestHandler(object):
       logs: A list of tuples (timestamp_usec, level, message).
     """
     logs_group = log_service_pb.UserAppLogGroup()
-    for timestamp_usec, level, message in logs:
+    for timestamp_usec, level, message, source_location in logs:
       log_line = logs_group.add_log_line()
       log_line.set_timestamp_usec(timestamp_usec)
       log_line.set_level(level)
+      if source_location:
+        log_line.mutable_source_location().set_file(source_location[0])
+        log_line.mutable_source_location().set_line(source_location[1])
+        log_line.mutable_source_location().set_function_name(source_location[2])
       log_line.set_message(message)
     request = log_service_pb.FlushRequest()
     request.set_logs(logs_group.Encode())

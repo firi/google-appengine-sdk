@@ -77,8 +77,8 @@ class AppEngineWebXmlParser(object):
 
         raise AppEngineConfigException('\n'.join(self.errors))
       return self.app_engine_web_xml
-    except ElementTree.ParseError:
-      raise AppEngineConfigException('Bad input -- not valid XML')
+    except ElementTree.ParseError as e:
+      raise AppEngineConfigException('Bad input -- not valid XML: %s' % e)
 
   def ProcessChildNode(self, child_node):
     """Processes second-level nodes one by one.
@@ -105,6 +105,12 @@ class AppEngineWebXmlParser(object):
       prop_name = xml_parser_utils.GetAttribute(sub_node, 'name')
       prop_value = xml_parser_utils.GetAttribute(sub_node, 'value')
       self.app_engine_web_xml.system_properties[prop_name] = prop_value
+
+  def ProcessBetaSettingsNode(self, node):
+    for sub_node in xml_parser_utils.GetNodes(node, 'setting'):
+      prop_name = xml_parser_utils.GetAttribute(sub_node, 'name')
+      prop_value = xml_parser_utils.GetAttribute(sub_node, 'value')
+      self.app_engine_web_xml.beta_settings[prop_name] = prop_value
 
   def ProcessVmSettingsNode(self, node):
     for sub_node in xml_parser_utils.GetNodes(node, 'setting'):
@@ -165,10 +171,7 @@ class AppEngineWebXmlParser(object):
     for sub_node in xml_parser_utils.GetNodes(node, 'include'):
       path = xml_parser_utils.GetAttribute(sub_node, 'path').strip()
       expiration = xml_parser_utils.GetAttribute(sub_node, 'expiration').strip()
-      static_file_include = StaticFileInclude()
-      static_file_include.pattern = path
-      static_file_include.expiration = expiration
-      static_file_include.http_headers = {}
+      static_file_include = StaticFileInclude(path, expiration, {})
 
       for http_header_node in xml_parser_utils.GetNodes(
           sub_node, 'http-header'):
@@ -265,10 +268,11 @@ class AppEngineWebXmlParser(object):
 
   def ProcessWarmupRequestsEnabledNode(self, node):
     warmup_requests_enabled = xml_parser_utils.BooleanValue(node.text)
+    warmup_service = AppEngineWebXml.WARMUP_SERVICE
     if warmup_requests_enabled:
-      self.inbound_services.add(self.WARMUP_SERVICE)
+      self.app_engine_web_xml.inbound_services.add(warmup_service)
     else:
-      self.inbound_services.remove(self.WARMUP_SERVICE)
+      self.app_engine_web_xml.inbound_services.remove(warmup_service)
 
   def ProcessThreadsafeNode(self, node):
     value = xml_parser_utils.BooleanValue(node.text)
@@ -311,7 +315,7 @@ class AppEngineWebXmlParser(object):
             node, 'disabled-rewriter')]
     self.app_engine_web_xml.pagespeed = pagespeed
 
-  def ProcessClassLoaderConfig(self, node):
+  def ProcessClassLoaderConfigNode(self, node):
     for node in xml_parser_utils.GetNodes(node, 'priority-specifier'):
       entry = PrioritySpecifierEntry()
       entry.filename = xml_parser_utils.GetAttribute(node, 'filename')
@@ -355,6 +359,60 @@ class AppEngineWebXmlParser(object):
         return
       self.app_engine_web_xml.auto_id_policy = policy
 
+  def ProcessHealthCheckNode(self, node):
+    health_check = HealthCheck()
+    for child in node:
+      tag = xml_parser_utils.GetTag(child)
+      if tag == 'enable-health-check':
+        health_check.enable_health_check = (
+            xml_parser_utils.BooleanValue(child.text))
+      elif tag == 'host':
+        health_check.host = child.text
+      elif tag in ('check-interval-sec', 'healthy-threshold',
+                   'restart-threshold', 'timeout-sec', 'unhealthy-threshold'):
+        text = child.text or ''
+        try:
+          value = self._PositiveInt(text)
+          setattr(health_check, tag.replace('-', '_'), value)
+        except ValueError:
+          self.errors.append('value for %s must be a positive integer: "%s"' %
+                             (tag, text))
+      else:
+        self.errors.append(
+            'unrecognized element within <health-check>: <%s>' % tag)
+    self.app_engine_web_xml.health_check = health_check
+
+  def ProcessVmHealthCheckNode(self, node):
+    self.ProcessHealthCheckNode(node)
+
+  def ProcessResourcesNode(self, node):
+    resources = Resources()
+    for child in node:
+      tag = xml_parser_utils.GetTag(child)
+      if tag in ('cpu', 'memory-gb', 'disk-size-gb'):
+        text = child.text or ''
+        setattr(resources, tag.replace('-', '_'), text)
+      else:
+        self.errors.append(
+            'unrecognized element within <resources>: <%s>' % tag)
+    self.app_engine_web_xml.resources = resources
+
+  def ProcessNetworkNode(self, node):
+    network = Network()
+    for child in node:
+      tag = xml_parser_utils.GetTag(child)
+      if tag in ('instance-tag', 'name'):
+        text = child.text or ''
+        setattr(network, tag.replace('-', '_'), text)
+      elif tag == 'forwarded-port':
+        if not hasattr(network, 'forwarded_ports'):
+          network.forwarded_ports = []
+        network.forwarded_ports.append(child.text or '')
+      else:
+        self.errors.append(
+            'unrecognized element within <network>: <%s>' % tag)
+    self.app_engine_web_xml.network = network
+
   def CheckScalingConstraints(self):
     """Checks that at most one type of scaling is enabled."""
     scaling_num = sum([x is not None for x in [
@@ -364,6 +422,25 @@ class AppEngineWebXmlParser(object):
         ]])
     if scaling_num > 1:
       self.errors.append('Cannot enable more than one type of scaling')
+
+  @staticmethod
+  def _PositiveInt(text):
+    """Parse the given text as a positive integer.
+
+    Args:
+      text: a string that should contain the decimal representation of a
+        positive integer.
+
+    Returns:
+      An int that is the parsed value.
+
+    Raises:
+      ValueError: if text cannot be parsed as a positive integer.
+    """
+    value = int(text)
+    if value > 0:
+      return value
+    raise ValueError('Not a positive integer: %s' % text)
 
 
 class AppEngineWebXml(ValueMixin):
@@ -381,7 +458,11 @@ class AppEngineWebXml(ValueMixin):
     self.source_language = None
     self.module = None
     self.system_properties = {}
+    self.beta_settings = {}
     self.vm_settings = {}
+    self.health_check = None
+    self.resources = None
+    self.network = None
     self.env_variables = {}
     self.instance_class = None
     self.automatic_scaling = None
@@ -424,10 +505,11 @@ class AppEngineWebXml(ValueMixin):
 
   def IncludesStatic(self, path):
     """Checks whether a given file should be classified as a static file."""
+    path = self._UrlifyPath(path)
     if not self.static_include_pattern:
 
       includes_list = ([inc.pattern for inc in self.static_file_includes]
-                       or [os.path.join(self.public_root, '**')])
+                       or [self.public_root + '/**'])
       self.static_include_pattern = self._CreatePatternListRegex(includes_list)
 
     if self.static_file_excludes:
@@ -441,6 +523,7 @@ class AppEngineWebXml(ValueMixin):
 
   def IncludesResource(self, path):
     """Checks whether a given file should be classified as a resource file."""
+    path = self._UrlifyPath(path)
     if not self.resource_include_pattern:
       includes = self.resource_file_includes or ['**']
       self.resource_include_pattern = self._CreatePatternListRegex(includes)
@@ -453,6 +536,27 @@ class AppEngineWebXml(ValueMixin):
         return False
 
     return self.resource_include_pattern.match(path)
+
+  @staticmethod
+  def _UrlifyPath(path):
+    r"""Convert the path into a form compatible with URLs.
+
+    On Unix-like systems, a path looks like foo/bar/baz.png, which is already
+    compatible with the path part of a URL like
+    http://myapp.appspot.com/foo/bar/baz.png
+    But on Windows, a path can also look like foo\bar\baz.png, which will fail
+    if we naively try to match it against a URL-style pattern like foo/**.png.
+    So we convert \ into / in that case. On Windows, / is also accepted as
+    a separator, so it is correct for that inputs foo\bar\baz.png
+    and foo/bar/baz.png both produce output foo/bar/baz.png.
+
+    Args:
+      path: the path to a file
+
+    Returns:
+      The input path, but using / as separator even if the OS uses \.
+    """
+    return path if os.path.sep == '/' else path.replace(os.path.sep, '/')
 
   def _CreatePatternListRegex(self, patterns):
     """Converts a list of patterns into a regex.
@@ -474,7 +578,7 @@ class AppEngineWebXml(ValueMixin):
     regexed_patterns = [self._CreateFileNameRegex(_StripLeadingSlashes(pat))
                         for pat in patterns]
 
-    app_root_regex = self._CreateFileNameRegex(self.app_root)
+    app_root_regex = self._CreateFileNameRegex(self._UrlifyPath(self.app_root))
     regexed_patterns = ['^%s\\/%s$' % (app_root_regex, pattern_regex)
                         for pattern_regex in regexed_patterns]
     return re.compile('(%s)' % '|'.join(regexed_patterns))
@@ -555,4 +659,27 @@ class PrioritySpecifierEntry(ValueMixin):
 
 class StaticFileInclude(ValueMixin):
   """Instances describe static files to be included in app configuration."""
+
+  def __init__(self, pattern, expiration, http_headers):
+    self.pattern = pattern
+    self.expiration = expiration
+    self.http_headers = http_headers
+
+
+class HealthCheck(ValueMixin):
+  """Instances contain information about health check settings."""
   pass
+
+
+class Resources(ValueMixin):
+  """Instances contain information about resources settings."""
+  pass
+
+
+class BetaSettings(ValueMixin):
+  """Instances contain information about beta settings."""
+  pass
+
+
+class Network(ValueMixin):
+  """Instances contain information about network settings."""

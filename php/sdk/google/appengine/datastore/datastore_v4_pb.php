@@ -34,6 +34,7 @@ namespace google\appengine\datastore\v4\Error {
     const CAPABILITY_DISABLED = 9;
     const TRY_ALTERNATE_BACKEND = 10;
     const SAFE_TIME_TOO_OLD = 11;
+    const RESOURCE_EXHAUSTED = 12;
   }
 }
 namespace google\appengine\datastore\v4 {
@@ -126,9 +127,27 @@ namespace google\appengine\datastore\v4 {
     public function hasVersion() {
       return isset($this->version);
     }
+    public function getCursor() {
+      if (!isset($this->cursor)) {
+        return '';
+      }
+      return $this->cursor;
+    }
+    public function setCursor($val) {
+      $this->cursor = $val;
+      return $this;
+    }
+    public function clearCursor() {
+      unset($this->cursor);
+      return $this;
+    }
+    public function hasCursor() {
+      return isset($this->cursor);
+    }
     public function clear() {
       $this->clearEntity();
       $this->clearVersion();
+      $this->clearCursor();
     }
     public function byteSizePartial() {
       $res = 0;
@@ -139,6 +158,10 @@ namespace google\appengine\datastore\v4 {
       if (isset($this->version)) {
         $res += 1;
         $res += $this->lengthVarInt64($this->version);
+      }
+      if (isset($this->cursor)) {
+        $res += 1;
+        $res += $this->lengthString(strlen($this->cursor));
       }
       return $res;
     }
@@ -151,6 +174,10 @@ namespace google\appengine\datastore\v4 {
       if (isset($this->version)) {
         $out->putVarInt32(16);
         $out->putVarInt64($this->version);
+      }
+      if (isset($this->cursor)) {
+        $out->putVarInt32(26);
+        $out->putPrefixedString($this->cursor);
       }
     }
     public function tryMerge($d) {
@@ -165,6 +192,11 @@ namespace google\appengine\datastore\v4 {
             break;
           case 16:
             $this->setVersion($d->getVarInt64());
+            break;
+          case 26:
+            $length = $d->getVarInt32();
+            $this->setCursor(substr($d->buffer(), $d->pos(), $length));
+            $d->skip($length);
             break;
           case 0:
             throw new \google\net\ProtocolBufferDecodeError();
@@ -186,6 +218,9 @@ namespace google\appengine\datastore\v4 {
       if ($x->hasVersion()) {
         $this->setVersion($x->getVersion());
       }
+      if ($x->hasCursor()) {
+        $this->setCursor($x->getCursor());
+      }
     }
     public function equals($x) {
       if ($x === $this) { return true; }
@@ -193,6 +228,8 @@ namespace google\appengine\datastore\v4 {
       if (isset($this->entity) && !$this->entity->equals($x->entity)) return false;
       if (isset($this->version) !== isset($x->version)) return false;
       if (isset($this->version) && !$this->integerEquals($this->version, $x->version)) return false;
+      if (isset($this->cursor) !== isset($x->cursor)) return false;
+      if (isset($this->cursor) && $this->cursor !== $x->cursor) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
@@ -202,6 +239,9 @@ namespace google\appengine\datastore\v4 {
       }
       if (isset($this->version)) {
         $res .= $prefix . "version: " . $this->debugFormatInt64($this->version) . "\n";
+      }
+      if (isset($this->cursor)) {
+        $res .= $prefix . "cursor: " . $this->debugFormatString($this->cursor) . "\n";
       }
       return $res;
     }
@@ -2024,6 +2064,23 @@ namespace google\appengine\datastore\v4 {
     public function clearEntityResult() {
       $this->entity_result = array();
     }
+    public function getSkippedCursor() {
+      if (!isset($this->skipped_cursor)) {
+        return '';
+      }
+      return $this->skipped_cursor;
+    }
+    public function setSkippedCursor($val) {
+      $this->skipped_cursor = $val;
+      return $this;
+    }
+    public function clearSkippedCursor() {
+      unset($this->skipped_cursor);
+      return $this;
+    }
+    public function hasSkippedCursor() {
+      return isset($this->skipped_cursor);
+    }
     public function getEndCursor() {
       if (!isset($this->end_cursor)) {
         return '';
@@ -2075,12 +2132,35 @@ namespace google\appengine\datastore\v4 {
     public function hasSkippedResults() {
       return isset($this->skipped_results);
     }
+    public function getSnapshotVersion() {
+      if (!isset($this->snapshot_version)) {
+        return "0";
+      }
+      return $this->snapshot_version;
+    }
+    public function setSnapshotVersion($val) {
+      if (is_double($val)) {
+        $this->snapshot_version = sprintf('%0.0F', $val);
+      } else {
+        $this->snapshot_version = $val;
+      }
+      return $this;
+    }
+    public function clearSnapshotVersion() {
+      unset($this->snapshot_version);
+      return $this;
+    }
+    public function hasSnapshotVersion() {
+      return isset($this->snapshot_version);
+    }
     public function clear() {
       $this->clearEntityResultType();
       $this->clearEntityResult();
+      $this->clearSkippedCursor();
       $this->clearEndCursor();
       $this->clearMoreResults();
       $this->clearSkippedResults();
+      $this->clearSnapshotVersion();
     }
     public function byteSizePartial() {
       $res = 0;
@@ -2093,6 +2173,10 @@ namespace google\appengine\datastore\v4 {
       foreach ($this->entity_result as $value) {
         $res += $this->lengthString($value->byteSizePartial());
       }
+      if (isset($this->skipped_cursor)) {
+        $res += 1;
+        $res += $this->lengthString(strlen($this->skipped_cursor));
+      }
       if (isset($this->end_cursor)) {
         $res += 1;
         $res += $this->lengthString(strlen($this->end_cursor));
@@ -2104,6 +2188,10 @@ namespace google\appengine\datastore\v4 {
       if (isset($this->skipped_results)) {
         $res += 1;
         $res += $this->lengthVarInt64($this->skipped_results);
+      }
+      if (isset($this->snapshot_version)) {
+        $res += 1;
+        $res += $this->lengthVarInt64($this->snapshot_version);
       }
       return $res;
     }
@@ -2118,6 +2206,10 @@ namespace google\appengine\datastore\v4 {
         $out->putVarInt32($value->byteSizePartial());
         $value->outputPartial($out);
       }
+      if (isset($this->skipped_cursor)) {
+        $out->putVarInt32(26);
+        $out->putPrefixedString($this->skipped_cursor);
+      }
       if (isset($this->end_cursor)) {
         $out->putVarInt32(34);
         $out->putPrefixedString($this->end_cursor);
@@ -2129,6 +2221,10 @@ namespace google\appengine\datastore\v4 {
       if (isset($this->skipped_results)) {
         $out->putVarInt32(48);
         $out->putVarInt32($this->skipped_results);
+      }
+      if (isset($this->snapshot_version)) {
+        $out->putVarInt32(56);
+        $out->putVarInt64($this->snapshot_version);
       }
     }
     public function tryMerge($d) {
@@ -2144,6 +2240,11 @@ namespace google\appengine\datastore\v4 {
             $d->skip($length);
             $this->addEntityResult()->tryMerge($tmp);
             break;
+          case 26:
+            $length = $d->getVarInt32();
+            $this->setSkippedCursor(substr($d->buffer(), $d->pos(), $length));
+            $d->skip($length);
+            break;
           case 34:
             $length = $d->getVarInt32();
             $this->setEndCursor(substr($d->buffer(), $d->pos(), $length));
@@ -2154,6 +2255,9 @@ namespace google\appengine\datastore\v4 {
             break;
           case 48:
             $this->setSkippedResults($d->getVarInt32());
+            break;
+          case 56:
+            $this->setSnapshotVersion($d->getVarInt64());
             break;
           case 0:
             throw new \google\net\ProtocolBufferDecodeError();
@@ -2179,6 +2283,9 @@ namespace google\appengine\datastore\v4 {
       foreach ($x->getEntityResultList() as $v) {
         $this->addEntityResult()->copyFrom($v);
       }
+      if ($x->hasSkippedCursor()) {
+        $this->setSkippedCursor($x->getSkippedCursor());
+      }
       if ($x->hasEndCursor()) {
         $this->setEndCursor($x->getEndCursor());
       }
@@ -2187,6 +2294,9 @@ namespace google\appengine\datastore\v4 {
       }
       if ($x->hasSkippedResults()) {
         $this->setSkippedResults($x->getSkippedResults());
+      }
+      if ($x->hasSnapshotVersion()) {
+        $this->setSnapshotVersion($x->getSnapshotVersion());
       }
     }
     public function equals($x) {
@@ -2197,12 +2307,16 @@ namespace google\appengine\datastore\v4 {
       foreach (array_map(null, $this->entity_result, $x->entity_result) as $v) {
         if (!$v[0]->equals($v[1])) return false;
       }
+      if (isset($this->skipped_cursor) !== isset($x->skipped_cursor)) return false;
+      if (isset($this->skipped_cursor) && $this->skipped_cursor !== $x->skipped_cursor) return false;
       if (isset($this->end_cursor) !== isset($x->end_cursor)) return false;
       if (isset($this->end_cursor) && $this->end_cursor !== $x->end_cursor) return false;
       if (isset($this->more_results) !== isset($x->more_results)) return false;
       if (isset($this->more_results) && $this->more_results !== $x->more_results) return false;
       if (isset($this->skipped_results) !== isset($x->skipped_results)) return false;
       if (isset($this->skipped_results) && !$this->integerEquals($this->skipped_results, $x->skipped_results)) return false;
+      if (isset($this->snapshot_version) !== isset($x->snapshot_version)) return false;
+      if (isset($this->snapshot_version) && !$this->integerEquals($this->snapshot_version, $x->snapshot_version)) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
@@ -2213,6 +2327,9 @@ namespace google\appengine\datastore\v4 {
       foreach ($this->entity_result as $value) {
         $res .= $prefix . "entity_result <\n" . $value->shortDebugString($prefix . "  ") . $prefix . ">\n";
       }
+      if (isset($this->skipped_cursor)) {
+        $res .= $prefix . "skipped_cursor: " . $this->debugFormatString($this->skipped_cursor) . "\n";
+      }
       if (isset($this->end_cursor)) {
         $res .= $prefix . "end_cursor: " . $this->debugFormatString($this->end_cursor) . "\n";
       }
@@ -2222,12 +2339,319 @@ namespace google\appengine\datastore\v4 {
       if (isset($this->skipped_results)) {
         $res .= $prefix . "skipped_results: " . $this->debugFormatInt32($this->skipped_results) . "\n";
       }
+      if (isset($this->snapshot_version)) {
+        $res .= $prefix . "snapshot_version: " . $this->debugFormatInt64($this->snapshot_version) . "\n";
+      }
+      return $res;
+    }
+  }
+}
+namespace google\appengine\datastore\v4\Mutation {
+  class Operation {
+    const UNKNOWN = 0;
+    const INSERT = 1;
+    const UPDATE = 2;
+    const UPSERT = 3;
+    const DELETE = 4;
+  }
+}
+namespace google\appengine\datastore\v4 {
+  class Mutation extends \google\net\ProtocolMessage {
+    public function getOp() {
+      if (!isset($this->op)) {
+        return 0;
+      }
+      return $this->op;
+    }
+    public function setOp($val) {
+      $this->op = $val;
+      return $this;
+    }
+    public function clearOp() {
+      unset($this->op);
+      return $this;
+    }
+    public function hasOp() {
+      return isset($this->op);
+    }
+    public function getKey() {
+      if (!isset($this->key)) {
+        return new \google\appengine\datastore\v4\Key();
+      }
+      return $this->key;
+    }
+    public function mutableKey() {
+      if (!isset($this->key)) {
+        $res = new \google\appengine\datastore\v4\Key();
+        $this->key = $res;
+        return $res;
+      }
+      return $this->key;
+    }
+    public function clearKey() {
+      if (isset($this->key)) {
+        unset($this->key);
+      }
+    }
+    public function hasKey() {
+      return isset($this->key);
+    }
+    public function getEntity() {
+      if (!isset($this->entity)) {
+        return new \google\appengine\datastore\v4\Entity();
+      }
+      return $this->entity;
+    }
+    public function mutableEntity() {
+      if (!isset($this->entity)) {
+        $res = new \google\appengine\datastore\v4\Entity();
+        $this->entity = $res;
+        return $res;
+      }
+      return $this->entity;
+    }
+    public function clearEntity() {
+      if (isset($this->entity)) {
+        unset($this->entity);
+      }
+    }
+    public function hasEntity() {
+      return isset($this->entity);
+    }
+    public function clear() {
+      $this->clearOp();
+      $this->clearKey();
+      $this->clearEntity();
+    }
+    public function byteSizePartial() {
+      $res = 0;
+      if (isset($this->op)) {
+        $res += 1;
+        $res += $this->lengthVarInt64($this->op);
+      }
+      if (isset($this->key)) {
+        $res += 1;
+        $res += $this->lengthString($this->key->byteSizePartial());
+      }
+      if (isset($this->entity)) {
+        $res += 1;
+        $res += $this->lengthString($this->entity->byteSizePartial());
+      }
+      return $res;
+    }
+    public function outputPartial($out) {
+      if (isset($this->op)) {
+        $out->putVarInt32(8);
+        $out->putVarInt32($this->op);
+      }
+      if (isset($this->key)) {
+        $out->putVarInt32(18);
+        $out->putVarInt32($this->key->byteSizePartial());
+        $this->key->outputPartial($out);
+      }
+      if (isset($this->entity)) {
+        $out->putVarInt32(26);
+        $out->putVarInt32($this->entity->byteSizePartial());
+        $this->entity->outputPartial($out);
+      }
+    }
+    public function tryMerge($d) {
+      while($d->avail() > 0) {
+        $tt = $d->getVarInt32();
+        switch ($tt) {
+          case 8:
+            $this->setOp($d->getVarInt32());
+            break;
+          case 18:
+            $length = $d->getVarInt32();
+            $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
+            $d->skip($length);
+            $this->mutableKey()->tryMerge($tmp);
+            break;
+          case 26:
+            $length = $d->getVarInt32();
+            $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
+            $d->skip($length);
+            $this->mutableEntity()->tryMerge($tmp);
+            break;
+          case 0:
+            throw new \google\net\ProtocolBufferDecodeError();
+            break;
+          default:
+            $d->skipData($tt);
+        }
+      };
+    }
+    public function checkInitialized() {
+      if (isset($this->key) && (!$this->key->isInitialized())) return 'key';
+      if (isset($this->entity) && (!$this->entity->isInitialized())) return 'entity';
+      return null;
+    }
+    public function mergeFrom($x) {
+      if ($x === $this) { throw new \IllegalArgumentException('Cannot copy message to itself'); }
+      if ($x->hasOp()) {
+        $this->setOp($x->getOp());
+      }
+      if ($x->hasKey()) {
+        $this->mutableKey()->mergeFrom($x->getKey());
+      }
+      if ($x->hasEntity()) {
+        $this->mutableEntity()->mergeFrom($x->getEntity());
+      }
+    }
+    public function equals($x) {
+      if ($x === $this) { return true; }
+      if (isset($this->op) !== isset($x->op)) return false;
+      if (isset($this->op) && $this->op !== $x->op) return false;
+      if (isset($this->key) !== isset($x->key)) return false;
+      if (isset($this->key) && !$this->key->equals($x->key)) return false;
+      if (isset($this->entity) !== isset($x->entity)) return false;
+      if (isset($this->entity) && !$this->entity->equals($x->entity)) return false;
+      return true;
+    }
+    public function shortDebugString($prefix = "") {
+      $res = '';
+      if (isset($this->op)) {
+        $res .= $prefix . "op: " . ($this->op) . "\n";
+      }
+      if (isset($this->key)) {
+        $res .= $prefix . "key <\n" . $this->key->shortDebugString($prefix . "  ") . $prefix . ">\n";
+      }
+      if (isset($this->entity)) {
+        $res .= $prefix . "entity <\n" . $this->entity->shortDebugString($prefix . "  ") . $prefix . ">\n";
+      }
       return $res;
     }
   }
 }
 namespace google\appengine\datastore\v4 {
-  class Mutation extends \google\net\ProtocolMessage {
+  class MutationResult extends \google\net\ProtocolMessage {
+    public function getKey() {
+      if (!isset($this->key)) {
+        return new \google\appengine\datastore\v4\Key();
+      }
+      return $this->key;
+    }
+    public function mutableKey() {
+      if (!isset($this->key)) {
+        $res = new \google\appengine\datastore\v4\Key();
+        $this->key = $res;
+        return $res;
+      }
+      return $this->key;
+    }
+    public function clearKey() {
+      if (isset($this->key)) {
+        unset($this->key);
+      }
+    }
+    public function hasKey() {
+      return isset($this->key);
+    }
+    public function getNewVersion() {
+      if (!isset($this->new_version)) {
+        return '0';
+      }
+      return $this->new_version;
+    }
+    public function setNewVersion($val) {
+      if (is_double($val)) {
+        $this->new_version = sprintf('%0.0F', $val);
+      } else {
+        $this->new_version = $val;
+      }
+      return $this;
+    }
+    public function clearNewVersion() {
+      unset($this->new_version);
+      return $this;
+    }
+    public function hasNewVersion() {
+      return isset($this->new_version);
+    }
+    public function clear() {
+      $this->clearKey();
+      $this->clearNewVersion();
+    }
+    public function byteSizePartial() {
+      $res = 0;
+      if (isset($this->key)) {
+        $res += 1;
+        $res += $this->lengthString($this->key->byteSizePartial());
+      }
+      if (isset($this->new_version)) {
+        $res += 1;
+        $res += $this->lengthVarInt64($this->new_version);
+      }
+      return $res;
+    }
+    public function outputPartial($out) {
+      if (isset($this->key)) {
+        $out->putVarInt32(26);
+        $out->putVarInt32($this->key->byteSizePartial());
+        $this->key->outputPartial($out);
+      }
+      if (isset($this->new_version)) {
+        $out->putVarInt32(32);
+        $out->putVarInt64($this->new_version);
+      }
+    }
+    public function tryMerge($d) {
+      while($d->avail() > 0) {
+        $tt = $d->getVarInt32();
+        switch ($tt) {
+          case 26:
+            $length = $d->getVarInt32();
+            $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
+            $d->skip($length);
+            $this->mutableKey()->tryMerge($tmp);
+            break;
+          case 32:
+            $this->setNewVersion($d->getVarInt64());
+            break;
+          case 0:
+            throw new \google\net\ProtocolBufferDecodeError();
+            break;
+          default:
+            $d->skipData($tt);
+        }
+      };
+    }
+    public function checkInitialized() {
+      if (isset($this->key) && (!$this->key->isInitialized())) return 'key';
+      return null;
+    }
+    public function mergeFrom($x) {
+      if ($x === $this) { throw new \IllegalArgumentException('Cannot copy message to itself'); }
+      if ($x->hasKey()) {
+        $this->mutableKey()->mergeFrom($x->getKey());
+      }
+      if ($x->hasNewVersion()) {
+        $this->setNewVersion($x->getNewVersion());
+      }
+    }
+    public function equals($x) {
+      if ($x === $this) { return true; }
+      if (isset($this->key) !== isset($x->key)) return false;
+      if (isset($this->key) && !$this->key->equals($x->key)) return false;
+      if (isset($this->new_version) !== isset($x->new_version)) return false;
+      if (isset($this->new_version) && !$this->integerEquals($this->new_version, $x->new_version)) return false;
+      return true;
+    }
+    public function shortDebugString($prefix = "") {
+      $res = '';
+      if (isset($this->key)) {
+        $res .= $prefix . "key <\n" . $this->key->shortDebugString($prefix . "  ") . $prefix . ">\n";
+      }
+      if (isset($this->new_version)) {
+        $res .= $prefix . "new_version: " . $this->debugFormatInt64($this->new_version) . "\n";
+      }
+      return $res;
+    }
+  }
+}
+namespace google\appengine\datastore\v4 {
+  class DeprecatedMutation extends \google\net\ProtocolMessage {
     private $upsert = array();
     private $update = array();
     private $insert = array();
@@ -2616,7 +3040,7 @@ namespace google\appengine\datastore\v4 {
   }
 }
 namespace google\appengine\datastore\v4 {
-  class MutationResult extends \google\net\ProtocolMessage {
+  class DeprecatedMutationResult extends \google\net\ProtocolMessage {
     private $insert_auto_id_key = array();
     private $upsert_version = array();
     private $update_version = array();
@@ -4418,6 +4842,7 @@ namespace google\appengine\datastore\v4\CommitRequest {
 }
 namespace google\appengine\datastore\v4 {
   class CommitRequest extends \google\net\ProtocolMessage {
+    private $mutation = array();
     public function getTransaction() {
       if (!isset($this->transaction)) {
         return '';
@@ -4435,27 +4860,27 @@ namespace google\appengine\datastore\v4 {
     public function hasTransaction() {
       return isset($this->transaction);
     }
-    public function getMutation() {
-      if (!isset($this->mutation)) {
-        return new \google\appengine\datastore\v4\Mutation();
+    public function getDeprecatedMutation() {
+      if (!isset($this->deprecated_mutation)) {
+        return new \google\appengine\datastore\v4\DeprecatedMutation();
       }
-      return $this->mutation;
+      return $this->deprecated_mutation;
     }
-    public function mutableMutation() {
-      if (!isset($this->mutation)) {
-        $res = new \google\appengine\datastore\v4\Mutation();
-        $this->mutation = $res;
+    public function mutableDeprecatedMutation() {
+      if (!isset($this->deprecated_mutation)) {
+        $res = new \google\appengine\datastore\v4\DeprecatedMutation();
+        $this->deprecated_mutation = $res;
         return $res;
       }
-      return $this->mutation;
+      return $this->deprecated_mutation;
     }
-    public function clearMutation() {
-      if (isset($this->mutation)) {
-        unset($this->mutation);
+    public function clearDeprecatedMutation() {
+      if (isset($this->deprecated_mutation)) {
+        unset($this->deprecated_mutation);
       }
     }
-    public function hasMutation() {
-      return isset($this->mutation);
+    public function hasDeprecatedMutation() {
+      return isset($this->deprecated_mutation);
     }
     public function getMode() {
       if (!isset($this->mode)) {
@@ -4474,10 +4899,60 @@ namespace google\appengine\datastore\v4 {
     public function hasMode() {
       return isset($this->mode);
     }
+    public function getMutationSize() {
+      return sizeof($this->mutation);
+    }
+    public function getMutationList() {
+      return $this->mutation;
+    }
+    public function mutableMutation($idx) {
+      if (!isset($this->mutation[$idx])) {
+        $val = new \google\appengine\datastore\v4\Mutation();
+        $this->mutation[$idx] = $val;
+        return $val;
+      }
+      return $this->mutation[$idx];
+    }
+    public function getMutation($idx) {
+      if (isset($this->mutation[$idx])) {
+        return $this->mutation[$idx];
+      }
+      if ($idx >= end(array_keys($this->mutation))) {
+        throw new \OutOfRangeException('index out of range: ' + $idx);
+      }
+      return new \google\appengine\datastore\v4\Mutation();
+    }
+    public function addMutation() {
+      $val = new \google\appengine\datastore\v4\Mutation();
+      $this->mutation[] = $val;
+      return $val;
+    }
+    public function clearMutation() {
+      $this->mutation = array();
+    }
+    public function getIgnoreReadOnly() {
+      if (!isset($this->ignore_read_only)) {
+        return false;
+      }
+      return $this->ignore_read_only;
+    }
+    public function setIgnoreReadOnly($val) {
+      $this->ignore_read_only = $val;
+      return $this;
+    }
+    public function clearIgnoreReadOnly() {
+      unset($this->ignore_read_only);
+      return $this;
+    }
+    public function hasIgnoreReadOnly() {
+      return isset($this->ignore_read_only);
+    }
     public function clear() {
       $this->clearTransaction();
-      $this->clearMutation();
+      $this->clearDeprecatedMutation();
       $this->clearMode();
+      $this->clearMutation();
+      $this->clearIgnoreReadOnly();
     }
     public function byteSizePartial() {
       $res = 0;
@@ -4485,13 +4960,21 @@ namespace google\appengine\datastore\v4 {
         $res += 1;
         $res += $this->lengthString(strlen($this->transaction));
       }
-      if (isset($this->mutation)) {
+      if (isset($this->deprecated_mutation)) {
         $res += 1;
-        $res += $this->lengthString($this->mutation->byteSizePartial());
+        $res += $this->lengthString($this->deprecated_mutation->byteSizePartial());
       }
       if (isset($this->mode)) {
         $res += 1;
         $res += $this->lengthVarInt64($this->mode);
+      }
+      $this->checkProtoArray($this->mutation);
+      $res += 1 * sizeof($this->mutation);
+      foreach ($this->mutation as $value) {
+        $res += $this->lengthString($value->byteSizePartial());
+      }
+      if (isset($this->ignore_read_only)) {
+        $res += 2;
       }
       return $res;
     }
@@ -4500,14 +4983,24 @@ namespace google\appengine\datastore\v4 {
         $out->putVarInt32(10);
         $out->putPrefixedString($this->transaction);
       }
-      if (isset($this->mutation)) {
+      if (isset($this->deprecated_mutation)) {
         $out->putVarInt32(18);
-        $out->putVarInt32($this->mutation->byteSizePartial());
-        $this->mutation->outputPartial($out);
+        $out->putVarInt32($this->deprecated_mutation->byteSizePartial());
+        $this->deprecated_mutation->outputPartial($out);
       }
       if (isset($this->mode)) {
         $out->putVarInt32(32);
         $out->putVarInt32($this->mode);
+      }
+      $this->checkProtoArray($this->mutation);
+      foreach ($this->mutation as $value) {
+        $out->putVarInt32(42);
+        $out->putVarInt32($value->byteSizePartial());
+        $value->outputPartial($out);
+      }
+      if (isset($this->ignore_read_only)) {
+        $out->putVarInt32(48);
+        $out->putBoolean($this->ignore_read_only);
       }
     }
     public function tryMerge($d) {
@@ -4523,10 +5016,19 @@ namespace google\appengine\datastore\v4 {
             $length = $d->getVarInt32();
             $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
             $d->skip($length);
-            $this->mutableMutation()->tryMerge($tmp);
+            $this->mutableDeprecatedMutation()->tryMerge($tmp);
             break;
           case 32:
             $this->setMode($d->getVarInt32());
+            break;
+          case 42:
+            $length = $d->getVarInt32();
+            $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
+            $d->skip($length);
+            $this->addMutation()->tryMerge($tmp);
+            break;
+          case 48:
+            $this->setIgnoreReadOnly($d->getBoolean());
             break;
           case 0:
             throw new \google\net\ProtocolBufferDecodeError();
@@ -4537,7 +5039,10 @@ namespace google\appengine\datastore\v4 {
       };
     }
     public function checkInitialized() {
-      if (isset($this->mutation) && (!$this->mutation->isInitialized())) return 'mutation';
+      if (isset($this->deprecated_mutation) && (!$this->deprecated_mutation->isInitialized())) return 'deprecated_mutation';
+      foreach ($this->mutation as $value) {
+        if (!$value->isInitialized()) return 'mutation';
+      }
       return null;
     }
     public function mergeFrom($x) {
@@ -4545,21 +5050,33 @@ namespace google\appengine\datastore\v4 {
       if ($x->hasTransaction()) {
         $this->setTransaction($x->getTransaction());
       }
-      if ($x->hasMutation()) {
-        $this->mutableMutation()->mergeFrom($x->getMutation());
+      if ($x->hasDeprecatedMutation()) {
+        $this->mutableDeprecatedMutation()->mergeFrom($x->getDeprecatedMutation());
       }
       if ($x->hasMode()) {
         $this->setMode($x->getMode());
+      }
+      foreach ($x->getMutationList() as $v) {
+        $this->addMutation()->copyFrom($v);
+      }
+      if ($x->hasIgnoreReadOnly()) {
+        $this->setIgnoreReadOnly($x->getIgnoreReadOnly());
       }
     }
     public function equals($x) {
       if ($x === $this) { return true; }
       if (isset($this->transaction) !== isset($x->transaction)) return false;
       if (isset($this->transaction) && $this->transaction !== $x->transaction) return false;
-      if (isset($this->mutation) !== isset($x->mutation)) return false;
-      if (isset($this->mutation) && !$this->mutation->equals($x->mutation)) return false;
+      if (isset($this->deprecated_mutation) !== isset($x->deprecated_mutation)) return false;
+      if (isset($this->deprecated_mutation) && !$this->deprecated_mutation->equals($x->deprecated_mutation)) return false;
       if (isset($this->mode) !== isset($x->mode)) return false;
       if (isset($this->mode) && $this->mode !== $x->mode) return false;
+      if (sizeof($this->mutation) !== sizeof($x->mutation)) return false;
+      foreach (array_map(null, $this->mutation, $x->mutation) as $v) {
+        if (!$v[0]->equals($v[1])) return false;
+      }
+      if (isset($this->ignore_read_only) !== isset($x->ignore_read_only)) return false;
+      if (isset($this->ignore_read_only) && $this->ignore_read_only !== $x->ignore_read_only) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
@@ -4567,11 +5084,17 @@ namespace google\appengine\datastore\v4 {
       if (isset($this->transaction)) {
         $res .= $prefix . "transaction: " . $this->debugFormatString($this->transaction) . "\n";
       }
-      if (isset($this->mutation)) {
-        $res .= $prefix . "mutation <\n" . $this->mutation->shortDebugString($prefix . "  ") . $prefix . ">\n";
+      if (isset($this->deprecated_mutation)) {
+        $res .= $prefix . "deprecated_mutation <\n" . $this->deprecated_mutation->shortDebugString($prefix . "  ") . $prefix . ">\n";
       }
       if (isset($this->mode)) {
         $res .= $prefix . "mode: " . ($this->mode) . "\n";
+      }
+      foreach ($this->mutation as $value) {
+        $res .= $prefix . "mutation <\n" . $value->shortDebugString($prefix . "  ") . $prefix . ">\n";
+      }
+      if (isset($this->ignore_read_only)) {
+        $res .= $prefix . "ignore_read_only: " . $this->debugFormatBool($this->ignore_read_only) . "\n";
       }
       return $res;
     }
@@ -4579,44 +5102,114 @@ namespace google\appengine\datastore\v4 {
 }
 namespace google\appengine\datastore\v4 {
   class CommitResponse extends \google\net\ProtocolMessage {
-    public function getMutationResult() {
-      if (!isset($this->mutation_result)) {
-        return new \google\appengine\datastore\v4\MutationResult();
+    private $mutation_result = array();
+    public function getDeprecatedMutationResult() {
+      if (!isset($this->deprecated_mutation_result)) {
+        return new \google\appengine\datastore\v4\DeprecatedMutationResult();
       }
-      return $this->mutation_result;
+      return $this->deprecated_mutation_result;
     }
-    public function mutableMutationResult() {
-      if (!isset($this->mutation_result)) {
-        $res = new \google\appengine\datastore\v4\MutationResult();
-        $this->mutation_result = $res;
+    public function mutableDeprecatedMutationResult() {
+      if (!isset($this->deprecated_mutation_result)) {
+        $res = new \google\appengine\datastore\v4\DeprecatedMutationResult();
+        $this->deprecated_mutation_result = $res;
         return $res;
       }
-      return $this->mutation_result;
+      return $this->deprecated_mutation_result;
     }
-    public function clearMutationResult() {
-      if (isset($this->mutation_result)) {
-        unset($this->mutation_result);
+    public function clearDeprecatedMutationResult() {
+      if (isset($this->deprecated_mutation_result)) {
+        unset($this->deprecated_mutation_result);
       }
     }
-    public function hasMutationResult() {
-      return isset($this->mutation_result);
+    public function hasDeprecatedMutationResult() {
+      return isset($this->deprecated_mutation_result);
+    }
+    public function getMutationResultSize() {
+      return sizeof($this->mutation_result);
+    }
+    public function getMutationResultList() {
+      return $this->mutation_result;
+    }
+    public function mutableMutationResult($idx) {
+      if (!isset($this->mutation_result[$idx])) {
+        $val = new \google\appengine\datastore\v4\MutationResult();
+        $this->mutation_result[$idx] = $val;
+        return $val;
+      }
+      return $this->mutation_result[$idx];
+    }
+    public function getMutationResult($idx) {
+      if (isset($this->mutation_result[$idx])) {
+        return $this->mutation_result[$idx];
+      }
+      if ($idx >= end(array_keys($this->mutation_result))) {
+        throw new \OutOfRangeException('index out of range: ' + $idx);
+      }
+      return new \google\appengine\datastore\v4\MutationResult();
+    }
+    public function addMutationResult() {
+      $val = new \google\appengine\datastore\v4\MutationResult();
+      $this->mutation_result[] = $val;
+      return $val;
+    }
+    public function clearMutationResult() {
+      $this->mutation_result = array();
+    }
+    public function getIndexUpdates() {
+      if (!isset($this->index_updates)) {
+        return 0;
+      }
+      return $this->index_updates;
+    }
+    public function setIndexUpdates($val) {
+      $this->index_updates = $val;
+      return $this;
+    }
+    public function clearIndexUpdates() {
+      unset($this->index_updates);
+      return $this;
+    }
+    public function hasIndexUpdates() {
+      return isset($this->index_updates);
     }
     public function clear() {
+      $this->clearDeprecatedMutationResult();
       $this->clearMutationResult();
+      $this->clearIndexUpdates();
     }
     public function byteSizePartial() {
       $res = 0;
-      if (isset($this->mutation_result)) {
+      if (isset($this->deprecated_mutation_result)) {
         $res += 1;
-        $res += $this->lengthString($this->mutation_result->byteSizePartial());
+        $res += $this->lengthString($this->deprecated_mutation_result->byteSizePartial());
+      }
+      $this->checkProtoArray($this->mutation_result);
+      $res += 1 * sizeof($this->mutation_result);
+      foreach ($this->mutation_result as $value) {
+        $res += $this->lengthString($value->byteSizePartial());
+      }
+      if (isset($this->index_updates)) {
+        $res += 1;
+        $res += $this->lengthVarInt64($this->index_updates);
       }
       return $res;
     }
     public function outputPartial($out) {
-      if (isset($this->mutation_result)) {
+      if (isset($this->deprecated_mutation_result)) {
         $out->putVarInt32(10);
-        $out->putVarInt32($this->mutation_result->byteSizePartial());
-        $this->mutation_result->outputPartial($out);
+        $out->putVarInt32($this->deprecated_mutation_result->byteSizePartial());
+        $this->deprecated_mutation_result->outputPartial($out);
+      }
+      $this->checkProtoArray($this->mutation_result);
+      foreach ($this->mutation_result as $value) {
+        $out->putVarInt32(26);
+        $out->putVarInt32($value->byteSizePartial());
+        $value->outputPartial($out);
+      }
+      if (isset($this->index_updates)) {
+        $out->putVarInt32(32);
+        $out->putVarInt32($this->index_updates);
       }
     }
     public function tryMerge($d) {
@@ -4627,7 +5220,16 @@ namespace google\appengine\datastore\v4 {
             $length = $d->getVarInt32();
             $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
             $d->skip($length);
-            $this->mutableMutationResult()->tryMerge($tmp);
+            $this->mutableDeprecatedMutationResult()->tryMerge($tmp);
+            break;
+          case 26:
+            $length = $d->getVarInt32();
+            $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
+            $d->skip($length);
+            $this->addMutationResult()->tryMerge($tmp);
+            break;
+          case 32:
+            $this->setIndexUpdates($d->getVarInt32());
             break;
           case 0:
             throw new \google\net\ProtocolBufferDecodeError();
@@ -4638,25 +5240,46 @@ namespace google\appengine\datastore\v4 {
       };
     }
     public function checkInitialized() {
-      if (isset($this->mutation_result) && (!$this->mutation_result->isInitialized())) return 'mutation_result';
+      if (isset($this->deprecated_mutation_result) && (!$this->deprecated_mutation_result->isInitialized())) return 'deprecated_mutation_result';
+      foreach ($this->mutation_result as $value) {
+        if (!$value->isInitialized()) return 'mutation_result';
+      }
       return null;
     }
     public function mergeFrom($x) {
       if ($x === $this) { throw new \IllegalArgumentException('Cannot copy message to itself'); }
-      if ($x->hasMutationResult()) {
-        $this->mutableMutationResult()->mergeFrom($x->getMutationResult());
+      if ($x->hasDeprecatedMutationResult()) {
+        $this->mutableDeprecatedMutationResult()->mergeFrom($x->getDeprecatedMutationResult());
+      }
+      foreach ($x->getMutationResultList() as $v) {
+        $this->addMutationResult()->copyFrom($v);
+      }
+      if ($x->hasIndexUpdates()) {
+        $this->setIndexUpdates($x->getIndexUpdates());
       }
     }
     public function equals($x) {
       if ($x === $this) { return true; }
-      if (isset($this->mutation_result) !== isset($x->mutation_result)) return false;
-      if (isset($this->mutation_result) && !$this->mutation_result->equals($x->mutation_result)) return false;
+      if (isset($this->deprecated_mutation_result) !== isset($x->deprecated_mutation_result)) return false;
+      if (isset($this->deprecated_mutation_result) && !$this->deprecated_mutation_result->equals($x->deprecated_mutation_result)) return false;
+      if (sizeof($this->mutation_result) !== sizeof($x->mutation_result)) return false;
+      foreach (array_map(null, $this->mutation_result, $x->mutation_result) as $v) {
+        if (!$v[0]->equals($v[1])) return false;
+      }
+      if (isset($this->index_updates) !== isset($x->index_updates)) return false;
+      if (isset($this->index_updates) && !$this->integerEquals($this->index_updates, $x->index_updates)) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
       $res = '';
-      if (isset($this->mutation_result)) {
-        $res .= $prefix . "mutation_result <\n" . $this->mutation_result->shortDebugString($prefix . "  ") . $prefix . ">\n";
+      if (isset($this->deprecated_mutation_result)) {
+        $res .= $prefix . "deprecated_mutation_result <\n" . $this->deprecated_mutation_result->shortDebugString($prefix . "  ") . $prefix . ">\n";
+      }
+      foreach ($this->mutation_result as $value) {
+        $res .= $prefix . "mutation_result <\n" . $value->shortDebugString($prefix . "  ") . $prefix . ">\n";
+      }
+      if (isset($this->index_updates)) {
+        $res .= $prefix . "index_updates: " . $this->debugFormatInt32($this->index_updates) . "\n";
       }
       return $res;
     }
@@ -4922,91 +5545,6 @@ namespace google\appengine\datastore\v4 {
       $res = '';
       foreach ($this->allocated as $value) {
         $res .= $prefix . "allocated <\n" . $value->shortDebugString($prefix . "  ") . $prefix . ">\n";
-      }
-      return $res;
-    }
-  }
-}
-namespace google\appengine\datastore\v4 {
-  class WriteRequest extends \google\net\ProtocolMessage {
-    public function getMutation() {
-      if (!isset($this->mutation)) {
-        return new \google\appengine\datastore\v4\Mutation();
-      }
-      return $this->mutation;
-    }
-    public function mutableMutation() {
-      if (!isset($this->mutation)) {
-        $res = new \google\appengine\datastore\v4\Mutation();
-        $this->mutation = $res;
-        return $res;
-      }
-      return $this->mutation;
-    }
-    public function clearMutation() {
-      if (isset($this->mutation)) {
-        unset($this->mutation);
-      }
-    }
-    public function hasMutation() {
-      return isset($this->mutation);
-    }
-    public function clear() {
-      $this->clearMutation();
-    }
-    public function byteSizePartial() {
-      $res = 0;
-      if (isset($this->mutation)) {
-        $res += 1;
-        $res += $this->lengthString($this->mutation->byteSizePartial());
-      }
-      return $res;
-    }
-    public function outputPartial($out) {
-      if (isset($this->mutation)) {
-        $out->putVarInt32(10);
-        $out->putVarInt32($this->mutation->byteSizePartial());
-        $this->mutation->outputPartial($out);
-      }
-    }
-    public function tryMerge($d) {
-      while($d->avail() > 0) {
-        $tt = $d->getVarInt32();
-        switch ($tt) {
-          case 10:
-            $length = $d->getVarInt32();
-            $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
-            $d->skip($length);
-            $this->mutableMutation()->tryMerge($tmp);
-            break;
-          case 0:
-            throw new \google\net\ProtocolBufferDecodeError();
-            break;
-          default:
-            $d->skipData($tt);
-        }
-      };
-    }
-    public function checkInitialized() {
-      if ((!isset($this->mutation)) || (!$this->mutation->isInitialized())) return 'mutation';
-      return null;
-    }
-    public function mergeFrom($x) {
-      if ($x === $this) { throw new \IllegalArgumentException('Cannot copy message to itself'); }
-      if ($x->hasMutation()) {
-        $this->mutableMutation()->mergeFrom($x->getMutation());
-      }
-    }
-    public function equals($x) {
-      if ($x === $this) { return true; }
-      if (isset($this->mutation) !== isset($x->mutation)) return false;
-      if (isset($this->mutation) && !$this->mutation->equals($x->mutation)) return false;
-      return true;
-    }
-    public function shortDebugString($prefix = "") {
-      $res = '';
-      if (isset($this->mutation)) {
-        $res .= $prefix . "mutation <\n" . $this->mutation->shortDebugString($prefix . "  ") . $prefix . ">\n";
       }
       return $res;
     }
