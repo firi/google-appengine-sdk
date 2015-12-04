@@ -148,7 +148,8 @@ DEFAULT_RESOURCE_LIMITS = {
 APPCFG_CLIENT_ID = '550516889912.apps.googleusercontent.com'
 APPCFG_CLIENT_NOTSOSECRET = 'ykPq-0UYfKNprLRjVx1hBBar'
 APPCFG_SCOPES = ('https://www.googleapis.com/auth/appengine.admin',
-                 'https://www.googleapis.com/auth/cloud-platform')
+                 'https://www.googleapis.com/auth/cloud-platform',
+                 'https://www.googleapis.com/auth/userinfo.email')
 
 
 STATIC_FILE_PREFIX = '__static__'
@@ -577,12 +578,28 @@ def MigratePython27Notice():
   Prints a message to sys.stdout. The caller should have tested that the user is
   using Python 2.5, so as not to spuriously display this message.
   """
-  print (
+  ErrorUpdate(
       'WARNING: This application is using the Python 2.5 runtime, which is '
       'deprecated! It should be updated to the Python 2.7 runtime as soon as '
       'possible, which offers performance improvements and many new features. '
       'Learn how simple it is to migrate your application to Python 2.7 at '
       'https://developers.google.com/appengine/docs/python/python25/migrate27.')
+
+
+def MigratePageSpeedNotice():
+  """Tells the user that PageSpeed service is deprecated.
+
+  Encourages the user to remove PageSpeed configs from their app.yaml file.
+
+  Prints a message to sys.stdout. The caller should have tested that the user
+  has pagespeed configurations in their app.yaml file.
+  """
+  ErrorUpdate(
+      'WARNING: This application contains PageSpeed related configurations, '
+      'which is deprecated! Those configurations will stop working after '
+      'December 1, 2015. Read '
+      'https://cloud.google.com/appengine/docs/adminconsole/pagespeed#disabling-pagespeed'
+      ' to learn how to disable PageSpeed.')
 
 
 class IndexDefinitionUpload(object):
@@ -2796,7 +2813,6 @@ class AppCfgApp(object):
     options: The command line options parsed by 'parser'.
     argv: The original command line as a list.
     args: The positional command line args left over after parsing the options.
-    raw_input_fn: Function used for getting raw user input, like email.
     error_fh: Unexpected HTTPErrors are printed to this file handle.
 
   Attributes for testing:
@@ -2808,7 +2824,6 @@ class AppCfgApp(object):
 
   def __init__(self, argv, parser_class=optparse.OptionParser,
                rpc_server_class=None,
-               raw_input_fn=raw_input,
                out_fh=sys.stdout,
                error_fh=sys.stderr,
                update_check_class=sdk_update_checker.SDKUpdateChecker,
@@ -2829,7 +2844,6 @@ class AppCfgApp(object):
       argv: The list of arguments passed to this program.
       parser_class: Options parser to use for this application.
       rpc_server_class: RPC server class to use for this application.
-      raw_input_fn: Function used for getting user email.
       out_fh: All normal output is printed to this file handle.
       error_fh: Unexpected HTTPErrors are printed to this file handle.
       update_check_class: sdk_update_checker.SDKUpdateChecker class (can be
@@ -2859,7 +2873,6 @@ class AppCfgApp(object):
     self.parser_class = parser_class
     self.argv = argv
     self.rpc_server_class = rpc_server_class
-    self.raw_input_fn = raw_input_fn
     self.out_fh = out_fh
     self.error_fh = error_fh
     self.update_check_class = update_check_class
@@ -3253,18 +3266,10 @@ class AppCfgApp(object):
       self.rpc_server_class = appengine_rpc_httplib2.HttpRpcServerOAuth2
 
 
-    get_user_credentials = (
-        appengine_rpc_httplib2.HttpRpcServerOAuth2.OAuth2Parameters(
-            access_token=self.options.oauth2_access_token,
-            client_id=self.oauth_client_id,
-            client_secret=self.oauth_client_secret,
-            scope=self.oauth_scopes,
-            refresh_token=self.options.oauth2_refresh_token,
-            credential_file=self.options.oauth2_credential_file,
-            token_uri=self._GetTokenUri()))
+    oauth2_parameters = self._GetOAuth2Parameters()
 
 
-    return self.rpc_server_class(self.options.server, get_user_credentials,
+    return self.rpc_server_class(self.options.server, oauth2_parameters,
                                  GetUserAgent(), source,
                                  host_override=self.options.host,
                                  save_cookies=self.options.save_cookies,
@@ -3273,6 +3278,19 @@ class AppCfgApp(object):
                                  secure=self.options.secure,
                                  ignore_certs=self.options.ignore_certs,
                                  options=self.options)
+
+  def _GetOAuth2Parameters(self):
+    """Returns appropriate an OAuth2Parameters object for authentication."""
+    oauth2_parameters = (
+        appengine_rpc_httplib2.HttpRpcServerOAuth2.OAuth2Parameters(
+            access_token=self.options.oauth2_access_token,
+            client_id=self.oauth_client_id,
+            client_secret=self.oauth_client_secret,
+            scope=self.oauth_scopes,
+            refresh_token=self.options.oauth2_refresh_token,
+            credential_file=self.options.oauth2_credential_file,
+            token_uri=self._GetTokenUri()))
+    return oauth2_parameters
 
   def _GetTokenUri(self):
     """Returns the OAuth2 token_uri, or None to use the default URI.
@@ -3757,6 +3775,7 @@ class AppCfgApp(object):
     rpcserver = self._GetRpcServer()
     all_files = [self.basepath] + self.args
     has_python25_version = False
+    has_pagespeed = False
 
     for yaml_path in all_files:
       file_name = os.path.basename(yaml_path)
@@ -3768,6 +3787,9 @@ class AppCfgApp(object):
       if module_yaml.runtime == 'python':
         has_python25_version = True
 
+      if module_yaml.pagespeed:
+        has_pagespeed = True
+
 
 
       if not module_yaml.module and file_name != 'app.yaml':
@@ -3777,6 +3799,8 @@ class AppCfgApp(object):
       self.UpdateVersion(rpcserver, self.basepath, module_yaml, file_name)
     if has_python25_version:
       MigratePython27Notice()
+    if has_pagespeed:
+      MigratePageSpeedNotice()
 
   def Update(self):
     """Updates and deploys a new appversion and global app configs."""
@@ -3869,6 +3893,8 @@ class AppCfgApp(object):
 
     if appyaml.runtime == 'python':
       MigratePython27Notice()
+    if appyaml.pagespeed:
+      MigratePageSpeedNotice()
 
 
     if self.options.backends:
@@ -4774,7 +4800,7 @@ class AppCfgApp(object):
                     'sqlite3 module (included in python since 2.5).')
       sys.exit(1)
 
-    sys.exit(bulkloader.Run(arg_dict))
+    sys.exit(bulkloader.Run(arg_dict, self._GetOAuth2Parameters()))
 
   def _SetupLoad(self):
     """Performs common verification and set up for upload and download."""
@@ -4835,12 +4861,10 @@ class AppCfgApp(object):
                      'has_header',
                      'loader_opts',
                      'log_file',
-                     'email',
                      'debug',
                      'exporter_opts',
                      'mapper_opts',
                      'result_db_filename',
-                     'mapper_opts',
                      'dry_run',
                      'dump',
                      'restore',

@@ -153,6 +153,8 @@ class FieldValue(ProtocolBuffer.ProtocolMessage):
   DATE         =    3
   NUMBER       =    4
   GEO          =    5
+  PREFIX       =    6
+  TOKENIZED_PREFIX =    7
 
   _ContentType_NAMES = {
     0: "TEXT",
@@ -161,6 +163,8 @@ class FieldValue(ProtocolBuffer.ProtocolMessage):
     3: "DATE",
     4: "NUMBER",
     5: "GEO",
+    6: "PREFIX",
+    7: "TOKENIZED_PREFIX",
   }
 
   def ContentType_Name(cls, x): return cls._ContentType_NAMES.get(x, "")
@@ -888,10 +892,31 @@ class IndexShardSettings(ProtocolBuffer.ProtocolMessage):
   _STYLE_CONTENT_TYPE = """"""
   _PROTO_DESCRIPTOR_NAME = 'storage_onestore_v3.IndexShardSettings'
 class IndexMetadata(ProtocolBuffer.ProtocolMessage):
+
+
+  ACTIVE       =    0
+  SOFT_DELETED =    1
+  PURGING      =    2
+
+  _IndexState_NAMES = {
+    0: "ACTIVE",
+    1: "SOFT_DELETED",
+    2: "PURGING",
+  }
+
+  def IndexState_Name(cls, x): return cls._IndexState_NAMES.get(x, "")
+  IndexState_Name = classmethod(IndexState_Name)
+
   has_is_over_field_number_threshold_ = 0
   is_over_field_number_threshold_ = 0
   has_index_shard_settings_ = 0
   index_shard_settings_ = None
+  has_index_state_ = 0
+  index_state_ = 0
+  has_index_delete_time_ = 0
+  index_delete_time_ = 0
+  has_max_index_size_bytes_ = 0
+  max_index_size_bytes_ = 0
 
   def __init__(self, contents=None):
     self.lazy_init_lock_ = thread.allocate_lock()
@@ -929,11 +954,53 @@ class IndexMetadata(ProtocolBuffer.ProtocolMessage):
 
   def has_index_shard_settings(self): return self.has_index_shard_settings_
 
+  def index_state(self): return self.index_state_
+
+  def set_index_state(self, x):
+    self.has_index_state_ = 1
+    self.index_state_ = x
+
+  def clear_index_state(self):
+    if self.has_index_state_:
+      self.has_index_state_ = 0
+      self.index_state_ = 0
+
+  def has_index_state(self): return self.has_index_state_
+
+  def index_delete_time(self): return self.index_delete_time_
+
+  def set_index_delete_time(self, x):
+    self.has_index_delete_time_ = 1
+    self.index_delete_time_ = x
+
+  def clear_index_delete_time(self):
+    if self.has_index_delete_time_:
+      self.has_index_delete_time_ = 0
+      self.index_delete_time_ = 0
+
+  def has_index_delete_time(self): return self.has_index_delete_time_
+
+  def max_index_size_bytes(self): return self.max_index_size_bytes_
+
+  def set_max_index_size_bytes(self, x):
+    self.has_max_index_size_bytes_ = 1
+    self.max_index_size_bytes_ = x
+
+  def clear_max_index_size_bytes(self):
+    if self.has_max_index_size_bytes_:
+      self.has_max_index_size_bytes_ = 0
+      self.max_index_size_bytes_ = 0
+
+  def has_max_index_size_bytes(self): return self.has_max_index_size_bytes_
+
 
   def MergeFrom(self, x):
     assert x is not self
     if (x.has_is_over_field_number_threshold()): self.set_is_over_field_number_threshold(x.is_over_field_number_threshold())
     if (x.has_index_shard_settings()): self.mutable_index_shard_settings().MergeFrom(x.index_shard_settings())
+    if (x.has_index_state()): self.set_index_state(x.index_state())
+    if (x.has_index_delete_time()): self.set_index_delete_time(x.index_delete_time())
+    if (x.has_max_index_size_bytes()): self.set_max_index_size_bytes(x.max_index_size_bytes())
 
   def Equals(self, x):
     if x is self: return 1
@@ -941,6 +1008,12 @@ class IndexMetadata(ProtocolBuffer.ProtocolMessage):
     if self.has_is_over_field_number_threshold_ and self.is_over_field_number_threshold_ != x.is_over_field_number_threshold_: return 0
     if self.has_index_shard_settings_ != x.has_index_shard_settings_: return 0
     if self.has_index_shard_settings_ and self.index_shard_settings_ != x.index_shard_settings_: return 0
+    if self.has_index_state_ != x.has_index_state_: return 0
+    if self.has_index_state_ and self.index_state_ != x.index_state_: return 0
+    if self.has_index_delete_time_ != x.has_index_delete_time_: return 0
+    if self.has_index_delete_time_ and self.index_delete_time_ != x.index_delete_time_: return 0
+    if self.has_max_index_size_bytes_ != x.has_max_index_size_bytes_: return 0
+    if self.has_max_index_size_bytes_ and self.max_index_size_bytes_ != x.max_index_size_bytes_: return 0
     return 1
 
   def IsInitialized(self, debug_strs=None):
@@ -952,17 +1025,26 @@ class IndexMetadata(ProtocolBuffer.ProtocolMessage):
     n = 0
     if (self.has_is_over_field_number_threshold_): n += 2
     if (self.has_index_shard_settings_): n += 1 + self.lengthString(self.index_shard_settings_.ByteSize())
+    if (self.has_index_state_): n += 1 + self.lengthVarInt64(self.index_state_)
+    if (self.has_index_delete_time_): n += 1 + self.lengthVarInt64(self.index_delete_time_)
+    if (self.has_max_index_size_bytes_): n += 1 + self.lengthVarInt64(self.max_index_size_bytes_)
     return n
 
   def ByteSizePartial(self):
     n = 0
     if (self.has_is_over_field_number_threshold_): n += 2
     if (self.has_index_shard_settings_): n += 1 + self.lengthString(self.index_shard_settings_.ByteSizePartial())
+    if (self.has_index_state_): n += 1 + self.lengthVarInt64(self.index_state_)
+    if (self.has_index_delete_time_): n += 1 + self.lengthVarInt64(self.index_delete_time_)
+    if (self.has_max_index_size_bytes_): n += 1 + self.lengthVarInt64(self.max_index_size_bytes_)
     return n
 
   def Clear(self):
     self.clear_is_over_field_number_threshold()
     self.clear_index_shard_settings()
+    self.clear_index_state()
+    self.clear_index_delete_time()
+    self.clear_max_index_size_bytes()
 
   def OutputUnchecked(self, out):
     if (self.has_is_over_field_number_threshold_):
@@ -972,6 +1054,15 @@ class IndexMetadata(ProtocolBuffer.ProtocolMessage):
       out.putVarInt32(18)
       out.putVarInt32(self.index_shard_settings_.ByteSize())
       self.index_shard_settings_.OutputUnchecked(out)
+    if (self.has_index_state_):
+      out.putVarInt32(24)
+      out.putVarInt32(self.index_state_)
+    if (self.has_index_delete_time_):
+      out.putVarInt32(32)
+      out.putVarInt64(self.index_delete_time_)
+    if (self.has_max_index_size_bytes_):
+      out.putVarInt32(40)
+      out.putVarInt64(self.max_index_size_bytes_)
 
   def OutputPartial(self, out):
     if (self.has_is_over_field_number_threshold_):
@@ -981,6 +1072,15 @@ class IndexMetadata(ProtocolBuffer.ProtocolMessage):
       out.putVarInt32(18)
       out.putVarInt32(self.index_shard_settings_.ByteSizePartial())
       self.index_shard_settings_.OutputPartial(out)
+    if (self.has_index_state_):
+      out.putVarInt32(24)
+      out.putVarInt32(self.index_state_)
+    if (self.has_index_delete_time_):
+      out.putVarInt32(32)
+      out.putVarInt64(self.index_delete_time_)
+    if (self.has_max_index_size_bytes_):
+      out.putVarInt32(40)
+      out.putVarInt64(self.max_index_size_bytes_)
 
   def TryMerge(self, d):
     while d.avail() > 0:
@@ -993,6 +1093,15 @@ class IndexMetadata(ProtocolBuffer.ProtocolMessage):
         tmp = ProtocolBuffer.Decoder(d.buffer(), d.pos(), d.pos() + length)
         d.skip(length)
         self.mutable_index_shard_settings().TryMerge(tmp)
+        continue
+      if tt == 24:
+        self.set_index_state(d.getVarInt32())
+        continue
+      if tt == 32:
+        self.set_index_delete_time(d.getVarInt64())
+        continue
+      if tt == 40:
+        self.set_max_index_size_bytes(d.getVarInt64())
         continue
 
 
@@ -1007,6 +1116,9 @@ class IndexMetadata(ProtocolBuffer.ProtocolMessage):
       res+=prefix+"index_shard_settings <\n"
       res+=self.index_shard_settings_.__str__(prefix + "  ", printElemNumber)
       res+=prefix+">\n"
+    if self.has_index_state_: res+=prefix+("index_state: %s\n" % self.DebugFormatInt32(self.index_state_))
+    if self.has_index_delete_time_: res+=prefix+("index_delete_time: %s\n" % self.DebugFormatInt64(self.index_delete_time_))
+    if self.has_max_index_size_bytes_: res+=prefix+("max_index_size_bytes: %s\n" % self.DebugFormatInt64(self.max_index_size_bytes_))
     return res
 
 
@@ -1015,18 +1127,27 @@ class IndexMetadata(ProtocolBuffer.ProtocolMessage):
 
   kis_over_field_number_threshold = 1
   kindex_shard_settings = 2
+  kindex_state = 3
+  kindex_delete_time = 4
+  kmax_index_size_bytes = 5
 
   _TEXT = _BuildTagLookupTable({
     0: "ErrorCode",
     1: "is_over_field_number_threshold",
     2: "index_shard_settings",
-  }, 2)
+    3: "index_state",
+    4: "index_delete_time",
+    5: "max_index_size_bytes",
+  }, 5)
 
   _TYPES = _BuildTagLookupTable({
     0: ProtocolBuffer.Encoder.NUMERIC,
     1: ProtocolBuffer.Encoder.NUMERIC,
     2: ProtocolBuffer.Encoder.STRING,
-  }, 2, ProtocolBuffer.Encoder.MAX_TYPE)
+    3: ProtocolBuffer.Encoder.NUMERIC,
+    4: ProtocolBuffer.Encoder.NUMERIC,
+    5: ProtocolBuffer.Encoder.NUMERIC,
+  }, 5, ProtocolBuffer.Encoder.MAX_TYPE)
 
 
   _STYLE = """"""

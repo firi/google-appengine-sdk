@@ -241,7 +241,9 @@ class APIServer(wsgi_server.WsgiServer):
         service = request.service_name()
         service_stub = apiproxy_stub_map.apiproxy.GetStub(service)
         environ['HTTP_HOST'] = self._balanced_address
-        service_stub.request_data.register_request_id(environ, request_id)
+        op = getattr(service_stub.request_data, 'register_request_id', None)
+        if callable(op):
+          op(environ, request_id)
       api_response = _execute_request(request).Encode()
       response.set_response(api_response)
     except Exception, e:

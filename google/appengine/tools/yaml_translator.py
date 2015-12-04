@@ -116,7 +116,9 @@ class AppYamlTranslator(object):
         ('application', self.app_engine_web_xml.app_id),
         ('source_language', self.app_engine_web_xml.source_language),
         ('module', self.app_engine_web_xml.module),
-        ('version', self.app_engine_web_xml.version_id)]:
+        ('service', self.app_engine_web_xml.service),
+        ('version', self.app_engine_web_xml.version_id)
+    ]:
       if field:
         basic_statements.append(
             '%s: %s' % (entry_name, self.SanitizeForYaml(field)))
@@ -129,6 +131,8 @@ class AppYamlTranslator(object):
         ('code_lock', self.app_engine_web_xml.codelock)]:
       if field:
         basic_statements.append('%s: %s' % (entry_name, field))
+    if self.app_engine_web_xml.env != '1':
+      basic_statements.append('env: %s' % self.app_engine_web_xml.env)
     return basic_statements
 
   def TranslateAutomaticScaling(self):
@@ -219,7 +223,8 @@ class AppYamlTranslator(object):
 
   def TranslateBetaSettings(self):
     """Translates Beta settings in appengine-web.xml to yaml."""
-    if not self.app_engine_web_xml.vm:
+    if ((not self.app_engine_web_xml.vm) and
+        (self.app_engine_web_xml.env != '2')):
       return []
 
     settings = self.app_engine_web_xml.beta_settings or {}
@@ -238,7 +243,8 @@ class AppYamlTranslator(object):
 
   def TranslateVmSettings(self):
     """Translates VM settings in appengine-web.xml to yaml."""
-    if not self.app_engine_web_xml.vm:
+    if ((not self.app_engine_web_xml.vm) and
+        (self.app_engine_web_xml.env != '2')):
       return []
 
     settings = self.app_engine_web_xml.vm_settings or {}
