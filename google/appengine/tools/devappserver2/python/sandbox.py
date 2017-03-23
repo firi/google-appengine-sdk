@@ -42,11 +42,12 @@ from google.appengine.tools.devappserver2.python import stubs
 CODING_MAGIC_COMMENT_RE = re.compile('coding[:=]\s*([-\w.]+)')
 DEFAULT_ENCODING = 'ascii'
 
-_C_MODULES = frozenset(['cv', 'Crypto', 'lxml', 'numpy', 'PIL'])
+_C_MODULES = frozenset(['cv', 'Crypto', 'lxml', 'grpc', 'numpy', 'PIL'])
 
 NAME_TO_CMODULE_WHITELIST_REGEX = {
     'cv': re.compile(r'cv(\..*)?$'),
     'lxml': re.compile(r'lxml(\..*)?$'),
+    'grpcio': re.compile(r'grpc(\..*)?$'),
     'numpy': re.compile(r'numpy(\..*)?$'),
     'pycrypto': re.compile(r'Crypto(\..*)?$'),
     'PIL': re.compile(r'(PIL(\..*)?|_imaging|_imagingft|_imagingmath)$'),
@@ -169,7 +170,21 @@ def enable_sandbox(config):
   if not config.vm:
     _install_fake_file(config, python_lib_paths, path_override_hook)
     _install_open_hooks()
-  sys.platform = 'linux3'
+
+  # NOTE(bryanmau): The sys.platform was a hack needed to solve
+  # b/7482060.  After python version 2.7.4 this is no longer needed.
+  def was_created_before(ver1, ver2):
+    """Returns true if the integer tuple ver1 is less than the tuple ver2."""
+    if ver1[0] != ver2[0]:
+      return ver1[0] < ver2[0]
+    elif ver1[1] != ver2[1]:
+      return ver1[1] < ver2[1]
+    else:
+      return ver1[2] < ver2[2]
+
+  if was_created_before(sys.version_info, (2, 7, 4)):
+    sys.platform = 'linux3'
+
   _install_import_hooks(config, path_override_hook)
   sys.path_importer_cache = {}
   if not config.vm:
@@ -283,8 +298,8 @@ def _find_shared_object_c_module():
 
 def _should_keep_module(name):
   """Returns True if the module should be retained after sandboxing."""
-  return (name in ('__builtin__', 'sys', 'codecs', 'encodings', 'site',
-                   'google') or
+  return (name in ('__builtin__', '__main__', 'sys', 'codecs', 'encodings',
+                   'site', 'google') or
           name.startswith('google.') or name.startswith('encodings.') or
 
 
@@ -893,6 +908,7 @@ _WHITE_LIST_C_MODULES = [
     'posix',  # Only indirectly through the os module.
     'pyexpat',
     '_random',
+    '_scproxy',  # Mac OS X compatibility
     '_sha256',  # Python2.5 compatibility
     '_sha512',  # Python2.5 compatibility
     '_sha',  # Python2.5 compatibility
@@ -978,6 +994,7 @@ class PathRestrictingImportHook(object):
         (filename.endswith('.pyc') and
          os.path.exists(filename.replace('.pyc', '.py')))):
       return None
+
     return self
 
   def load_module(self, fullname):

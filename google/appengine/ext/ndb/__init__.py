@@ -1,5 +1,5 @@
 #
-# Copyright 2008 Google Inc. All Rights Reserved.
+# Copyright 2008 The ndb Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 
 """NDB -- A new datastore API for the Google App Engine Python runtime."""
 
-__version__ = '1.0.10'
+__version__ = '1.0.13b1'
 
 __all__ = []
 

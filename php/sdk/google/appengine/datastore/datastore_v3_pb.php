@@ -20,7 +20,6 @@
 namespace dummy {
   if (!defined('GOOGLE_APPENGINE_CLASSLOADER')) {
     require_once 'google/appengine/runtime/proto/ProtocolMessage.php';
-    require_once 'google/appengine/api/api_base_pb.php';
     require_once 'google/appengine/datastore/action_pb.php';
     require_once 'google/appengine/datastore/entity_pb.php';
     require_once 'google/appengine/datastore/snapshot_pb.php';
@@ -84,23 +83,6 @@ namespace google\appengine_datastore_v3 {
     public function hasMarkChanges() {
       return isset($this->mark_changes);
     }
-    public function getAFieldThatShouldNeverBeUsed() {
-      if (!isset($this->a_field_that_should_never_be_used)) {
-        return '';
-      }
-      return $this->a_field_that_should_never_be_used;
-    }
-    public function setAFieldThatShouldNeverBeUsed($val) {
-      $this->a_field_that_should_never_be_used = $val;
-      return $this;
-    }
-    public function clearAFieldThatShouldNeverBeUsed() {
-      unset($this->a_field_that_should_never_be_used);
-      return $this;
-    }
-    public function hasAFieldThatShouldNeverBeUsed() {
-      return isset($this->a_field_that_should_never_be_used);
-    }
     public function getCompositeIndexSize() {
       return sizeof($this->composite_index);
     }
@@ -132,30 +114,29 @@ namespace google\appengine_datastore_v3 {
     public function clearCompositeIndex() {
       $this->composite_index = array();
     }
-    public function getDatabase() {
-      if (!isset($this->database)) {
+    public function getDatabaseId() {
+      if (!isset($this->database_id)) {
         return '';
       }
-      return $this->database;
+      return $this->database_id;
     }
-    public function setDatabase($val) {
-      $this->database = $val;
+    public function setDatabaseId($val) {
+      $this->database_id = $val;
       return $this;
     }
-    public function clearDatabase() {
-      unset($this->database);
+    public function clearDatabaseId() {
+      unset($this->database_id);
       return $this;
     }
-    public function hasDatabase() {
-      return isset($this->database);
+    public function hasDatabaseId() {
+      return isset($this->database_id);
     }
     public function clear() {
       $this->clearHandle();
       $this->clearApp();
       $this->clearMarkChanges();
-      $this->clearAFieldThatShouldNeverBeUsed();
       $this->clearCompositeIndex();
-      $this->clearDatabase();
+      $this->clearDatabaseId();
     }
     public function byteSizePartial() {
       $res = 0;
@@ -169,18 +150,14 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->mark_changes)) {
         $res += 2;
       }
-      if (isset($this->a_field_that_should_never_be_used)) {
-        $res += 1;
-        $res += $this->lengthString(strlen($this->a_field_that_should_never_be_used));
-      }
       $this->checkProtoArray($this->composite_index);
       $res += 1 * sizeof($this->composite_index);
       foreach ($this->composite_index as $value) {
         $res += $this->lengthString($value->byteSizePartial());
       }
-      if (isset($this->database)) {
+      if (isset($this->database_id)) {
         $res += 1;
-        $res += $this->lengthString(strlen($this->database));
+        $res += $this->lengthString(strlen($this->database_id));
       }
       return $res;
     }
@@ -197,19 +174,15 @@ namespace google\appengine_datastore_v3 {
         $out->putVarInt32(24);
         $out->putBoolean($this->mark_changes);
       }
-      if (isset($this->a_field_that_should_never_be_used)) {
-        $out->putVarInt32(34);
-        $out->putPrefixedString($this->a_field_that_should_never_be_used);
-      }
       $this->checkProtoArray($this->composite_index);
       foreach ($this->composite_index as $value) {
         $out->putVarInt32(42);
         $out->putVarInt32($value->byteSizePartial());
         $value->outputPartial($out);
       }
-      if (isset($this->database)) {
+      if (isset($this->database_id)) {
         $out->putVarInt32(50);
-        $out->putPrefixedString($this->database);
+        $out->putPrefixedString($this->database_id);
       }
     }
     public function tryMerge($d) {
@@ -227,11 +200,6 @@ namespace google\appengine_datastore_v3 {
           case 24:
             $this->setMarkChanges($d->getBoolean());
             break;
-          case 34:
-            $length = $d->getVarInt32();
-            $this->setAFieldThatShouldNeverBeUsed(substr($d->buffer(), $d->pos(), $length));
-            $d->skip($length);
-            break;
           case 42:
             $length = $d->getVarInt32();
             $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
@@ -240,7 +208,7 @@ namespace google\appengine_datastore_v3 {
             break;
           case 50:
             $length = $d->getVarInt32();
-            $this->setDatabase(substr($d->buffer(), $d->pos(), $length));
+            $this->setDatabaseId(substr($d->buffer(), $d->pos(), $length));
             $d->skip($length);
             break;
           case 0:
@@ -270,14 +238,11 @@ namespace google\appengine_datastore_v3 {
       if ($x->hasMarkChanges()) {
         $this->setMarkChanges($x->getMarkChanges());
       }
-      if ($x->hasAFieldThatShouldNeverBeUsed()) {
-        $this->setAFieldThatShouldNeverBeUsed($x->getAFieldThatShouldNeverBeUsed());
-      }
       foreach ($x->getCompositeIndexList() as $v) {
         $this->addCompositeIndex()->copyFrom($v);
       }
-      if ($x->hasDatabase()) {
-        $this->setDatabase($x->getDatabase());
+      if ($x->hasDatabaseId()) {
+        $this->setDatabaseId($x->getDatabaseId());
       }
     }
     public function equals($x) {
@@ -288,14 +253,12 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->app) && $this->app !== $x->app) return false;
       if (isset($this->mark_changes) !== isset($x->mark_changes)) return false;
       if (isset($this->mark_changes) && $this->mark_changes !== $x->mark_changes) return false;
-      if (isset($this->a_field_that_should_never_be_used) !== isset($x->a_field_that_should_never_be_used)) return false;
-      if (isset($this->a_field_that_should_never_be_used) && $this->a_field_that_should_never_be_used !== $x->a_field_that_should_never_be_used) return false;
       if (sizeof($this->composite_index) !== sizeof($x->composite_index)) return false;
       foreach (array_map(null, $this->composite_index, $x->composite_index) as $v) {
         if (!$v[0]->equals($v[1])) return false;
       }
-      if (isset($this->database) !== isset($x->database)) return false;
-      if (isset($this->database) && $this->database !== $x->database) return false;
+      if (isset($this->database_id) !== isset($x->database_id)) return false;
+      if (isset($this->database_id) && $this->database_id !== $x->database_id) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
@@ -309,14 +272,11 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->mark_changes)) {
         $res .= $prefix . "mark_changes: " . $this->debugFormatBool($this->mark_changes) . "\n";
       }
-      if (isset($this->a_field_that_should_never_be_used)) {
-        $res .= $prefix . "a_field_that_should_never_be_used: " . $this->debugFormatString($this->a_field_that_should_never_be_used) . "\n";
-      }
       foreach ($this->composite_index as $value) {
         $res .= $prefix . "composite_index <\n" . $value->shortDebugString($prefix . "  ") . $prefix . ">\n";
       }
-      if (isset($this->database)) {
-        $res .= $prefix . "database: " . $this->debugFormatString($this->database) . "\n";
+      if (isset($this->database_id)) {
+        $res .= $prefix . "database_id: " . $this->debugFormatString($this->database_id) . "\n";
       }
       return $res;
     }
@@ -1179,22 +1139,39 @@ namespace google\appengine_datastore_v3 {
     public function hasPersistOffset() {
       return isset($this->persist_offset);
     }
-    public function getDatabase() {
-      if (!isset($this->database)) {
+    public function getDatabaseId() {
+      if (!isset($this->database_id)) {
         return '';
       }
-      return $this->database;
+      return $this->database_id;
     }
-    public function setDatabase($val) {
-      $this->database = $val;
+    public function setDatabaseId($val) {
+      $this->database_id = $val;
       return $this;
     }
-    public function clearDatabase() {
-      unset($this->database);
+    public function clearDatabaseId() {
+      unset($this->database_id);
       return $this;
     }
-    public function hasDatabase() {
-      return isset($this->database);
+    public function hasDatabaseId() {
+      return isset($this->database_id);
+    }
+    public function getShallow() {
+      if (!isset($this->shallow)) {
+        return false;
+      }
+      return $this->shallow;
+    }
+    public function setShallow($val) {
+      $this->shallow = $val;
+      return $this;
+    }
+    public function clearShallow() {
+      unset($this->shallow);
+      return $this;
+    }
+    public function hasShallow() {
+      return isset($this->shallow);
     }
     public function clear() {
       $this->clearApp();
@@ -1223,7 +1200,8 @@ namespace google\appengine_datastore_v3 {
       $this->clearMinSafeTimeSeconds();
       $this->clearSafeReplicaName();
       $this->clearPersistOffset();
-      $this->clearDatabase();
+      $this->clearDatabaseId();
+      $this->clearShallow();
     }
     public function byteSizePartial() {
       $res = 0;
@@ -1331,9 +1309,12 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->persist_offset)) {
         $res += 3;
       }
-      if (isset($this->database)) {
+      if (isset($this->database_id)) {
         $res += 2;
-        $res += $this->lengthString(strlen($this->database));
+        $res += $this->lengthString(strlen($this->database_id));
+      }
+      if (isset($this->shallow)) {
+        $res += 3;
       }
       return $res;
     }
@@ -1455,9 +1436,13 @@ namespace google\appengine_datastore_v3 {
         $out->putVarInt32(296);
         $out->putBoolean($this->persist_offset);
       }
-      if (isset($this->database)) {
+      if (isset($this->database_id)) {
         $out->putVarInt32(338);
-        $out->putPrefixedString($this->database);
+        $out->putPrefixedString($this->database_id);
+      }
+      if (isset($this->shallow)) {
+        $out->putVarInt32(344);
+        $out->putBoolean($this->shallow);
       }
     }
     public function tryMerge($d) {
@@ -1573,8 +1558,11 @@ namespace google\appengine_datastore_v3 {
             break;
           case 338:
             $length = $d->getVarInt32();
-            $this->setDatabase(substr($d->buffer(), $d->pos(), $length));
+            $this->setDatabaseId(substr($d->buffer(), $d->pos(), $length));
             $d->skip($length);
+            break;
+          case 344:
+            $this->setShallow($d->getBoolean());
             break;
           case 0:
             throw new \google\net\ProtocolBufferDecodeError();
@@ -1681,8 +1669,11 @@ namespace google\appengine_datastore_v3 {
       if ($x->hasPersistOffset()) {
         $this->setPersistOffset($x->getPersistOffset());
       }
-      if ($x->hasDatabase()) {
-        $this->setDatabase($x->getDatabase());
+      if ($x->hasDatabaseId()) {
+        $this->setDatabaseId($x->getDatabaseId());
+      }
+      if ($x->hasShallow()) {
+        $this->setShallow($x->getShallow());
       }
     }
     public function equals($x) {
@@ -1751,8 +1742,10 @@ namespace google\appengine_datastore_v3 {
       }
       if (isset($this->persist_offset) !== isset($x->persist_offset)) return false;
       if (isset($this->persist_offset) && $this->persist_offset !== $x->persist_offset) return false;
-      if (isset($this->database) !== isset($x->database)) return false;
-      if (isset($this->database) && $this->database !== $x->database) return false;
+      if (isset($this->database_id) !== isset($x->database_id)) return false;
+      if (isset($this->database_id) && $this->database_id !== $x->database_id) return false;
+      if (isset($this->shallow) !== isset($x->shallow)) return false;
+      if (isset($this->shallow) && $this->shallow !== $x->shallow) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
@@ -1835,8 +1828,11 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->persist_offset)) {
         $res .= $prefix . "persist_offset: " . $this->debugFormatBool($this->persist_offset) . "\n";
       }
-      if (isset($this->database)) {
-        $res .= $prefix . "database: " . $this->debugFormatString($this->database) . "\n";
+      if (isset($this->database_id)) {
+        $res .= $prefix . "database_id: " . $this->debugFormatString($this->database_id) . "\n";
+      }
+      if (isset($this->shallow)) {
+        $res .= $prefix . "shallow: " . $this->debugFormatBool($this->shallow) . "\n";
       }
       return $res;
     }
@@ -3232,6 +3228,23 @@ namespace google\appengine_datastore_v3 {
     public function hasPlanLabel() {
       return isset($this->plan_label);
     }
+    public function getKeyPathLength() {
+      if (!isset($this->key_path_length)) {
+        return 0;
+      }
+      return $this->key_path_length;
+    }
+    public function setKeyPathLength($val) {
+      $this->key_path_length = $val;
+      return $this;
+    }
+    public function clearKeyPathLength() {
+      unset($this->key_path_length);
+      return $this;
+    }
+    public function hasKeyPathLength() {
+      return isset($this->key_path_length);
+    }
     public function clear() {
       $this->clearPrimaryScan();
       $this->clearMergeJoinScan();
@@ -3243,6 +3256,7 @@ namespace google\appengine_datastore_v3 {
       $this->clearPropertyName();
       $this->clearDistinctInfixSize();
       $this->clearPlanLabel();
+      $this->clearKeyPathLength();
     }
     public function byteSizePartial() {
       $res = 0;
@@ -3286,6 +3300,10 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->plan_label)) {
         $res += 2;
         $res += $this->lengthString(strlen($this->plan_label));
+      }
+      if (isset($this->key_path_length)) {
+        $res += 2;
+        $res += $this->lengthVarInt64($this->key_path_length);
       }
       return $res;
     }
@@ -3336,6 +3354,10 @@ namespace google\appengine_datastore_v3 {
         $out->putVarInt32(210);
         $out->putPrefixedString($this->plan_label);
       }
+      if (isset($this->key_path_length)) {
+        $out->putVarInt32(216);
+        $out->putVarInt32($this->key_path_length);
+      }
     }
     public function tryMerge($d) {
       while($d->avail() > 0) {
@@ -3377,6 +3399,9 @@ namespace google\appengine_datastore_v3 {
             $length = $d->getVarInt32();
             $this->setPlanLabel(substr($d->buffer(), $d->pos(), $length));
             $d->skip($length);
+            break;
+          case 216:
+            $this->setKeyPathLength($d->getVarInt32());
             break;
           case 0:
             throw new \google\net\ProtocolBufferDecodeError();
@@ -3428,6 +3453,9 @@ namespace google\appengine_datastore_v3 {
       if ($x->hasPlanLabel()) {
         $this->setPlanLabel($x->getPlanLabel());
       }
+      if ($x->hasKeyPathLength()) {
+        $this->setKeyPathLength($x->getKeyPathLength());
+      }
     }
     public function equals($x) {
       if ($x === $this) { return true; }
@@ -3455,6 +3483,8 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->distinct_infix_size) && !$this->integerEquals($this->distinct_infix_size, $x->distinct_infix_size)) return false;
       if (isset($this->plan_label) !== isset($x->plan_label)) return false;
       if (isset($this->plan_label) && $this->plan_label !== $x->plan_label) return false;
+      if (isset($this->key_path_length) !== isset($x->key_path_length)) return false;
+      if (isset($this->key_path_length) && !$this->integerEquals($this->key_path_length, $x->key_path_length)) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
@@ -3488,6 +3518,9 @@ namespace google\appengine_datastore_v3 {
       }
       if (isset($this->plan_label)) {
         $res .= $prefix . "plan_label: " . $this->debugFormatString($this->plan_label) . "\n";
+      }
+      if (isset($this->key_path_length)) {
+        $res .= $prefix . "key_path_length: " . $this->debugFormatInt32($this->key_path_length) . "\n";
       }
       return $res;
     }
@@ -4091,27 +4124,27 @@ namespace google\appengine_datastore_v3 {
     public function hasApp() {
       return isset($this->app);
     }
-    public function getDatabase() {
-      if (!isset($this->database)) {
+    public function getDatabaseId() {
+      if (!isset($this->database_id)) {
         return '';
       }
-      return $this->database;
+      return $this->database_id;
     }
-    public function setDatabase($val) {
-      $this->database = $val;
+    public function setDatabaseId($val) {
+      $this->database_id = $val;
       return $this;
     }
-    public function clearDatabase() {
-      unset($this->database);
+    public function clearDatabaseId() {
+      unset($this->database_id);
       return $this;
     }
-    public function hasDatabase() {
-      return isset($this->database);
+    public function hasDatabaseId() {
+      return isset($this->database_id);
     }
     public function clear() {
       $this->clearCursor();
       $this->clearApp();
-      $this->clearDatabase();
+      $this->clearDatabaseId();
     }
     public function byteSizePartial() {
       $res = 0;
@@ -4122,9 +4155,9 @@ namespace google\appengine_datastore_v3 {
         $res += 1;
         $res += $this->lengthString(strlen($this->app));
       }
-      if (isset($this->database)) {
+      if (isset($this->database_id)) {
         $res += 1;
-        $res += $this->lengthString(strlen($this->database));
+        $res += $this->lengthString(strlen($this->database_id));
       }
       return $res;
     }
@@ -4137,9 +4170,9 @@ namespace google\appengine_datastore_v3 {
         $out->putVarInt32(18);
         $out->putPrefixedString($this->app);
       }
-      if (isset($this->database)) {
+      if (isset($this->database_id)) {
         $out->putVarInt32(26);
-        $out->putPrefixedString($this->database);
+        $out->putPrefixedString($this->database_id);
       }
     }
     public function tryMerge($d) {
@@ -4156,7 +4189,7 @@ namespace google\appengine_datastore_v3 {
             break;
           case 26:
             $length = $d->getVarInt32();
-            $this->setDatabase(substr($d->buffer(), $d->pos(), $length));
+            $this->setDatabaseId(substr($d->buffer(), $d->pos(), $length));
             $d->skip($length);
             break;
           case 0:
@@ -4179,8 +4212,8 @@ namespace google\appengine_datastore_v3 {
       if ($x->hasApp()) {
         $this->setApp($x->getApp());
       }
-      if ($x->hasDatabase()) {
-        $this->setDatabase($x->getDatabase());
+      if ($x->hasDatabaseId()) {
+        $this->setDatabaseId($x->getDatabaseId());
       }
     }
     public function equals($x) {
@@ -4189,8 +4222,8 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->cursor) && !$this->integerEquals($this->cursor, $x->cursor)) return false;
       if (isset($this->app) !== isset($x->app)) return false;
       if (isset($this->app) && $this->app !== $x->app) return false;
-      if (isset($this->database) !== isset($x->database)) return false;
-      if (isset($this->database) && $this->database !== $x->database) return false;
+      if (isset($this->database_id) !== isset($x->database_id)) return false;
+      if (isset($this->database_id) && $this->database_id !== $x->database_id) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
@@ -4201,8 +4234,8 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->app)) {
         $res .= $prefix . "app: " . $this->debugFormatString($this->app) . "\n";
       }
-      if (isset($this->database)) {
-        $res .= $prefix . "database: " . $this->debugFormatString($this->database) . "\n";
+      if (isset($this->database_id)) {
+        $res .= $prefix . "database_id: " . $this->debugFormatString($this->database_id) . "\n";
       }
       return $res;
     }
@@ -4222,6 +4255,10 @@ namespace google\appengine_datastore_v3\Error {
     const TRY_ALTERNATE_BACKEND = 10;
     const SAFE_TIME_TOO_OLD = 11;
     const RESOURCE_EXHAUSTED = 12;
+    const NOT_FOUND = 13;
+    const ALREADY_EXISTS = 14;
+    const FAILED_PRECONDITION = 15;
+    const UNAUTHENTICATED = 16;
   }
 }
 namespace google\appengine_datastore_v3 {
@@ -8372,6 +8409,13 @@ namespace google\appengine_datastore_v3 {
     }
   }
 }
+namespace google\appengine_datastore_v3\BeginTransactionRequest {
+  class TransactionMode {
+    const UNKNOWN = 0;
+    const READ_ONLY = 1;
+    const READ_WRITE = 2;
+  }
+}
 namespace google\appengine_datastore_v3 {
   class BeginTransactionRequest extends \google\net\ProtocolMessage {
     public function getApp() {
@@ -8408,27 +8452,68 @@ namespace google\appengine_datastore_v3 {
     public function hasAllowMultipleEg() {
       return isset($this->allow_multiple_eg);
     }
-    public function getDatabase() {
-      if (!isset($this->database)) {
+    public function getDatabaseId() {
+      if (!isset($this->database_id)) {
         return '';
       }
-      return $this->database;
+      return $this->database_id;
     }
-    public function setDatabase($val) {
-      $this->database = $val;
+    public function setDatabaseId($val) {
+      $this->database_id = $val;
       return $this;
     }
-    public function clearDatabase() {
-      unset($this->database);
+    public function clearDatabaseId() {
+      unset($this->database_id);
       return $this;
     }
-    public function hasDatabase() {
-      return isset($this->database);
+    public function hasDatabaseId() {
+      return isset($this->database_id);
+    }
+    public function getMode() {
+      if (!isset($this->mode)) {
+        return 0;
+      }
+      return $this->mode;
+    }
+    public function setMode($val) {
+      $this->mode = $val;
+      return $this;
+    }
+    public function clearMode() {
+      unset($this->mode);
+      return $this;
+    }
+    public function hasMode() {
+      return isset($this->mode);
+    }
+    public function getPreviousTransaction() {
+      if (!isset($this->previous_transaction)) {
+        return new \google\appengine_datastore_v3\Transaction();
+      }
+      return $this->previous_transaction;
+    }
+    public function mutablePreviousTransaction() {
+      if (!isset($this->previous_transaction)) {
+        $res = new \google\appengine_datastore_v3\Transaction();
+        $this->previous_transaction = $res;
+        return $res;
+      }
+      return $this->previous_transaction;
+    }
+    public function clearPreviousTransaction() {
+      if (isset($this->previous_transaction)) {
+        unset($this->previous_transaction);
+      }
+    }
+    public function hasPreviousTransaction() {
+      return isset($this->previous_transaction);
     }
     public function clear() {
       $this->clearApp();
       $this->clearAllowMultipleEg();
-      $this->clearDatabase();
+      $this->clearDatabaseId();
+      $this->clearMode();
+      $this->clearPreviousTransaction();
     }
     public function byteSizePartial() {
       $res = 0;
@@ -8439,9 +8524,17 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->allow_multiple_eg)) {
         $res += 2;
       }
-      if (isset($this->database)) {
+      if (isset($this->database_id)) {
         $res += 1;
-        $res += $this->lengthString(strlen($this->database));
+        $res += $this->lengthString(strlen($this->database_id));
+      }
+      if (isset($this->mode)) {
+        $res += 1;
+        $res += $this->lengthVarInt64($this->mode);
+      }
+      if (isset($this->previous_transaction)) {
+        $res += 1;
+        $res += $this->lengthString($this->previous_transaction->byteSizePartial());
       }
       return $res;
     }
@@ -8454,9 +8547,18 @@ namespace google\appengine_datastore_v3 {
         $out->putVarInt32(16);
         $out->putBoolean($this->allow_multiple_eg);
       }
-      if (isset($this->database)) {
+      if (isset($this->database_id)) {
         $out->putVarInt32(34);
-        $out->putPrefixedString($this->database);
+        $out->putPrefixedString($this->database_id);
+      }
+      if (isset($this->mode)) {
+        $out->putVarInt32(40);
+        $out->putVarInt32($this->mode);
+      }
+      if (isset($this->previous_transaction)) {
+        $out->putVarInt32(58);
+        $out->putVarInt32($this->previous_transaction->byteSizePartial());
+        $this->previous_transaction->outputPartial($out);
       }
     }
     public function tryMerge($d) {
@@ -8473,8 +8575,17 @@ namespace google\appengine_datastore_v3 {
             break;
           case 34:
             $length = $d->getVarInt32();
-            $this->setDatabase(substr($d->buffer(), $d->pos(), $length));
+            $this->setDatabaseId(substr($d->buffer(), $d->pos(), $length));
             $d->skip($length);
+            break;
+          case 40:
+            $this->setMode($d->getVarInt32());
+            break;
+          case 58:
+            $length = $d->getVarInt32();
+            $tmp = new \google\net\Decoder($d->buffer(), $d->pos(), $d->pos() + $length);
+            $d->skip($length);
+            $this->mutablePreviousTransaction()->tryMerge($tmp);
             break;
           case 0:
             throw new \google\net\ProtocolBufferDecodeError();
@@ -8486,6 +8597,7 @@ namespace google\appengine_datastore_v3 {
     }
     public function checkInitialized() {
       if (!isset($this->app)) return 'app';
+      if (isset($this->previous_transaction) && (!$this->previous_transaction->isInitialized())) return 'previous_transaction';
       return null;
     }
     public function mergeFrom($x) {
@@ -8496,8 +8608,14 @@ namespace google\appengine_datastore_v3 {
       if ($x->hasAllowMultipleEg()) {
         $this->setAllowMultipleEg($x->getAllowMultipleEg());
       }
-      if ($x->hasDatabase()) {
-        $this->setDatabase($x->getDatabase());
+      if ($x->hasDatabaseId()) {
+        $this->setDatabaseId($x->getDatabaseId());
+      }
+      if ($x->hasMode()) {
+        $this->setMode($x->getMode());
+      }
+      if ($x->hasPreviousTransaction()) {
+        $this->mutablePreviousTransaction()->mergeFrom($x->getPreviousTransaction());
       }
     }
     public function equals($x) {
@@ -8506,8 +8624,12 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->app) && $this->app !== $x->app) return false;
       if (isset($this->allow_multiple_eg) !== isset($x->allow_multiple_eg)) return false;
       if (isset($this->allow_multiple_eg) && $this->allow_multiple_eg !== $x->allow_multiple_eg) return false;
-      if (isset($this->database) !== isset($x->database)) return false;
-      if (isset($this->database) && $this->database !== $x->database) return false;
+      if (isset($this->database_id) !== isset($x->database_id)) return false;
+      if (isset($this->database_id) && $this->database_id !== $x->database_id) return false;
+      if (isset($this->mode) !== isset($x->mode)) return false;
+      if (isset($this->mode) && $this->mode !== $x->mode) return false;
+      if (isset($this->previous_transaction) !== isset($x->previous_transaction)) return false;
+      if (isset($this->previous_transaction) && !$this->previous_transaction->equals($x->previous_transaction)) return false;
       return true;
     }
     public function shortDebugString($prefix = "") {
@@ -8518,8 +8640,14 @@ namespace google\appengine_datastore_v3 {
       if (isset($this->allow_multiple_eg)) {
         $res .= $prefix . "allow_multiple_eg: " . $this->debugFormatBool($this->allow_multiple_eg) . "\n";
       }
-      if (isset($this->database)) {
-        $res .= $prefix . "database: " . $this->debugFormatString($this->database) . "\n";
+      if (isset($this->database_id)) {
+        $res .= $prefix . "database_id: " . $this->debugFormatString($this->database_id) . "\n";
+      }
+      if (isset($this->mode)) {
+        $res .= $prefix . "mode: " . ($this->mode) . "\n";
+      }
+      if (isset($this->previous_transaction)) {
+        $res .= $prefix . "previous_transaction <\n" . $this->previous_transaction->shortDebugString($prefix . "  ") . $prefix . ">\n";
       }
       return $res;
     }
@@ -8794,6 +8922,181 @@ namespace google\appengine_datastore_v3 {
       foreach ($this->version as $value) {
         $res .= $prefix . "Version {\n" . $value->shortDebugString($prefix . "  ") . $prefix . "}\n";
       }
+      return $res;
+    }
+  }
+}
+namespace google\appengine_datastore_v3 {
+  class GetIndicesRequest extends \google\net\ProtocolMessage {
+    public function getAppId() {
+      if (!isset($this->app_id)) {
+        return '';
+      }
+      return $this->app_id;
+    }
+    public function setAppId($val) {
+      $this->app_id = $val;
+      return $this;
+    }
+    public function clearAppId() {
+      unset($this->app_id);
+      return $this;
+    }
+    public function hasAppId() {
+      return isset($this->app_id);
+    }
+    public function getDatabaseId() {
+      if (!isset($this->database_id)) {
+        return '';
+      }
+      return $this->database_id;
+    }
+    public function setDatabaseId($val) {
+      $this->database_id = $val;
+      return $this;
+    }
+    public function clearDatabaseId() {
+      unset($this->database_id);
+      return $this;
+    }
+    public function hasDatabaseId() {
+      return isset($this->database_id);
+    }
+    public function clear() {
+      $this->clearAppId();
+      $this->clearDatabaseId();
+    }
+    public function byteSizePartial() {
+      $res = 0;
+      if (isset($this->app_id)) {
+        $res += 1;
+        $res += $this->lengthString(strlen($this->app_id));
+      }
+      if (isset($this->database_id)) {
+        $res += 1;
+        $res += $this->lengthString(strlen($this->database_id));
+      }
+      return $res;
+    }
+    public function outputPartial($out) {
+      if (isset($this->app_id)) {
+        $out->putVarInt32(10);
+        $out->putPrefixedString($this->app_id);
+      }
+      if (isset($this->database_id)) {
+        $out->putVarInt32(18);
+        $out->putPrefixedString($this->database_id);
+      }
+    }
+    public function tryMerge($d) {
+      while($d->avail() > 0) {
+        $tt = $d->getVarInt32();
+        switch ($tt) {
+          case 10:
+            $length = $d->getVarInt32();
+            $this->setAppId(substr($d->buffer(), $d->pos(), $length));
+            $d->skip($length);
+            break;
+          case 18:
+            $length = $d->getVarInt32();
+            $this->setDatabaseId(substr($d->buffer(), $d->pos(), $length));
+            $d->skip($length);
+            break;
+          case 0:
+            throw new \google\net\ProtocolBufferDecodeError();
+            break;
+          default:
+            $d->skipData($tt);
+        }
+      };
+    }
+    public function checkInitialized() {
+      if (!isset($this->app_id)) return 'app_id';
+      return null;
+    }
+    public function mergeFrom($x) {
+      if ($x === $this) { throw new \IllegalArgumentException('Cannot copy message to itself'); }
+      if ($x->hasAppId()) {
+        $this->setAppId($x->getAppId());
+      }
+      if ($x->hasDatabaseId()) {
+        $this->setDatabaseId($x->getDatabaseId());
+      }
+    }
+    public function equals($x) {
+      if ($x === $this) { return true; }
+      if (isset($this->app_id) !== isset($x->app_id)) return false;
+      if (isset($this->app_id) && $this->app_id !== $x->app_id) return false;
+      if (isset($this->database_id) !== isset($x->database_id)) return false;
+      if (isset($this->database_id) && $this->database_id !== $x->database_id) return false;
+      return true;
+    }
+    public function shortDebugString($prefix = "") {
+      $res = '';
+      if (isset($this->app_id)) {
+        $res .= $prefix . "app_id: " . $this->debugFormatString($this->app_id) . "\n";
+      }
+      if (isset($this->database_id)) {
+        $res .= $prefix . "database_id: " . $this->debugFormatString($this->database_id) . "\n";
+      }
+      return $res;
+    }
+  }
+}
+namespace google\appengine_datastore_v3\DatastoreService_3 {
+  class Method {
+    const Get = 1;
+    const Put = 2;
+    const Touch = 3;
+    const Delete = 4;
+    const RunQuery = 5;
+    const AddActions = 6;
+    const Next = 7;
+    const DeleteCursor = 8;
+    const BeginTransaction = 9;
+    const Commit = 10;
+    const Rollback = 11;
+    const AllocateIds = 12;
+    const CreateIndex = 13;
+    const UpdateIndex = 14;
+    const GetIndices = 15;
+    const DeleteIndex = 16;
+  }
+}
+namespace google\appengine_datastore_v3 {
+  class DatastoreService_3 extends \google\net\ProtocolMessage {
+    public function clear() {
+    }
+    public function byteSizePartial() {
+      $res = 0;
+      return $res;
+    }
+    public function outputPartial($out) {
+    }
+    public function tryMerge($d) {
+      while($d->avail() > 0) {
+        $tt = $d->getVarInt32();
+        switch ($tt) {
+          case 0:
+            throw new \google\net\ProtocolBufferDecodeError();
+            break;
+          default:
+            $d->skipData($tt);
+        }
+      };
+    }
+    public function checkInitialized() {
+      return null;
+    }
+    public function mergeFrom($x) {
+      if ($x === $this) { throw new \IllegalArgumentException('Cannot copy message to itself'); }
+    }
+    public function equals($x) {
+      if ($x === $this) { return true; }
+      return true;
+    }
+    public function shortDebugString($prefix = "") {
+      $res = '';
       return $res;
     }
   }

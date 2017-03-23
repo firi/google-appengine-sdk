@@ -569,8 +569,8 @@ class PropertyValue_ReferenceValue(ProtocolBuffer.ProtocolMessage):
   app_ = ""
   has_name_space_ = 0
   name_space_ = ""
-  has_database_ = 0
-  database_ = ""
+  has_database_id_ = 0
+  database_id_ = ""
 
   def __init__(self, contents=None):
     self.pathelement_ = []
@@ -618,18 +618,18 @@ class PropertyValue_ReferenceValue(ProtocolBuffer.ProtocolMessage):
 
   def clear_pathelement(self):
     self.pathelement_ = []
-  def database(self): return self.database_
+  def database_id(self): return self.database_id_
 
-  def set_database(self, x):
-    self.has_database_ = 1
-    self.database_ = x
+  def set_database_id(self, x):
+    self.has_database_id_ = 1
+    self.database_id_ = x
 
-  def clear_database(self):
-    if self.has_database_:
-      self.has_database_ = 0
-      self.database_ = ""
+  def clear_database_id(self):
+    if self.has_database_id_:
+      self.has_database_id_ = 0
+      self.database_id_ = ""
 
-  def has_database(self): return self.has_database_
+  def has_database_id(self): return self.has_database_id_
 
 
   def MergeFrom(self, x):
@@ -637,7 +637,7 @@ class PropertyValue_ReferenceValue(ProtocolBuffer.ProtocolMessage):
     if (x.has_app()): self.set_app(x.app())
     if (x.has_name_space()): self.set_name_space(x.name_space())
     for i in xrange(x.pathelement_size()): self.add_pathelement().CopyFrom(x.pathelement(i))
-    if (x.has_database()): self.set_database(x.database())
+    if (x.has_database_id()): self.set_database_id(x.database_id())
 
   def Equals(self, x):
     if x is self: return 1
@@ -648,8 +648,8 @@ class PropertyValue_ReferenceValue(ProtocolBuffer.ProtocolMessage):
     if len(self.pathelement_) != len(x.pathelement_): return 0
     for e1, e2 in zip(self.pathelement_, x.pathelement_):
       if e1 != e2: return 0
-    if self.has_database_ != x.has_database_: return 0
-    if self.has_database_ and self.database_ != x.database_: return 0
+    if self.has_database_id_ != x.has_database_id_: return 0
+    if self.has_database_id_ and self.database_id_ != x.database_id_: return 0
     return 1
 
   def IsInitialized(self, debug_strs=None):
@@ -668,7 +668,7 @@ class PropertyValue_ReferenceValue(ProtocolBuffer.ProtocolMessage):
     if (self.has_name_space_): n += 2 + self.lengthString(len(self.name_space_))
     n += 2 * len(self.pathelement_)
     for i in xrange(len(self.pathelement_)): n += self.pathelement_[i].ByteSize()
-    if (self.has_database_): n += 2 + self.lengthString(len(self.database_))
+    if (self.has_database_id_): n += 2 + self.lengthString(len(self.database_id_))
     return n + 1
 
   def ByteSizePartial(self):
@@ -679,14 +679,14 @@ class PropertyValue_ReferenceValue(ProtocolBuffer.ProtocolMessage):
     if (self.has_name_space_): n += 2 + self.lengthString(len(self.name_space_))
     n += 2 * len(self.pathelement_)
     for i in xrange(len(self.pathelement_)): n += self.pathelement_[i].ByteSizePartial()
-    if (self.has_database_): n += 2 + self.lengthString(len(self.database_))
+    if (self.has_database_id_): n += 2 + self.lengthString(len(self.database_id_))
     return n
 
   def Clear(self):
     self.clear_app()
     self.clear_name_space()
     self.clear_pathelement()
-    self.clear_database()
+    self.clear_database_id()
 
   def OutputUnchecked(self, out):
     out.putVarInt32(106)
@@ -698,9 +698,9 @@ class PropertyValue_ReferenceValue(ProtocolBuffer.ProtocolMessage):
     if (self.has_name_space_):
       out.putVarInt32(162)
       out.putPrefixedString(self.name_space_)
-    if (self.has_database_):
+    if (self.has_database_id_):
       out.putVarInt32(186)
-      out.putPrefixedString(self.database_)
+      out.putPrefixedString(self.database_id_)
 
   def OutputPartial(self, out):
     if (self.has_app_):
@@ -713,9 +713,9 @@ class PropertyValue_ReferenceValue(ProtocolBuffer.ProtocolMessage):
     if (self.has_name_space_):
       out.putVarInt32(162)
       out.putPrefixedString(self.name_space_)
-    if (self.has_database_):
+    if (self.has_database_id_):
       out.putVarInt32(186)
-      out.putPrefixedString(self.database_)
+      out.putPrefixedString(self.database_id_)
 
   def TryMerge(self, d):
     while 1:
@@ -731,7 +731,7 @@ class PropertyValue_ReferenceValue(ProtocolBuffer.ProtocolMessage):
         self.set_name_space(d.getPrefixedString())
         continue
       if tt == 186:
-        self.set_database(d.getPrefixedString())
+        self.set_database_id(d.getPrefixedString())
         continue
 
 
@@ -751,7 +751,7 @@ class PropertyValue_ReferenceValue(ProtocolBuffer.ProtocolMessage):
       res+=e.__str__(prefix + "  ", printElemNumber)
       res+=prefix+"}\n"
       cnt+=1
-    if self.has_database_: res+=prefix+("database: %s\n" % self.DebugFormatString(self.database_))
+    if self.has_database_id_: res+=prefix+("database_id: %s\n" % self.DebugFormatString(self.database_id_))
     return res
 
 class PropertyValue(ProtocolBuffer.ProtocolMessage):
@@ -1078,7 +1078,7 @@ class PropertyValue(ProtocolBuffer.ProtocolMessage):
   kReferenceValuePathElementtype = 15
   kReferenceValuePathElementid = 16
   kReferenceValuePathElementname = 17
-  kReferenceValuedatabase = 23
+  kReferenceValuedatabase_id = 23
 
   _TEXT = _BuildTagLookupTable({
     0: "ErrorCode",
@@ -1104,7 +1104,7 @@ class PropertyValue(ProtocolBuffer.ProtocolMessage):
     20: "name_space",
     21: "federated_identity",
     22: "federated_provider",
-    23: "database",
+    23: "database_id",
   }, 23)
 
   _TYPES = _BuildTagLookupTable({
@@ -1774,8 +1774,8 @@ class Reference(ProtocolBuffer.ProtocolMessage):
   has_name_space_ = 0
   name_space_ = ""
   has_path_ = 0
-  has_database_ = 0
-  database_ = ""
+  has_database_id_ = 0
+  database_id_ = ""
 
   def __init__(self, contents=None):
     self.path_ = Path()
@@ -1815,18 +1815,18 @@ class Reference(ProtocolBuffer.ProtocolMessage):
 
   def has_path(self): return self.has_path_
 
-  def database(self): return self.database_
+  def database_id(self): return self.database_id_
 
-  def set_database(self, x):
-    self.has_database_ = 1
-    self.database_ = x
+  def set_database_id(self, x):
+    self.has_database_id_ = 1
+    self.database_id_ = x
 
-  def clear_database(self):
-    if self.has_database_:
-      self.has_database_ = 0
-      self.database_ = ""
+  def clear_database_id(self):
+    if self.has_database_id_:
+      self.has_database_id_ = 0
+      self.database_id_ = ""
 
-  def has_database(self): return self.has_database_
+  def has_database_id(self): return self.has_database_id_
 
 
   def MergeFrom(self, x):
@@ -1834,7 +1834,7 @@ class Reference(ProtocolBuffer.ProtocolMessage):
     if (x.has_app()): self.set_app(x.app())
     if (x.has_name_space()): self.set_name_space(x.name_space())
     if (x.has_path()): self.mutable_path().MergeFrom(x.path())
-    if (x.has_database()): self.set_database(x.database())
+    if (x.has_database_id()): self.set_database_id(x.database_id())
 
   def Equals(self, x):
     if x is self: return 1
@@ -1844,8 +1844,8 @@ class Reference(ProtocolBuffer.ProtocolMessage):
     if self.has_name_space_ and self.name_space_ != x.name_space_: return 0
     if self.has_path_ != x.has_path_: return 0
     if self.has_path_ and self.path_ != x.path_: return 0
-    if self.has_database_ != x.has_database_: return 0
-    if self.has_database_ and self.database_ != x.database_: return 0
+    if self.has_database_id_ != x.has_database_id_: return 0
+    if self.has_database_id_ and self.database_id_ != x.database_id_: return 0
     return 1
 
   def IsInitialized(self, debug_strs=None):
@@ -1866,7 +1866,7 @@ class Reference(ProtocolBuffer.ProtocolMessage):
     n += self.lengthString(len(self.app_))
     if (self.has_name_space_): n += 2 + self.lengthString(len(self.name_space_))
     n += self.lengthString(self.path_.ByteSize())
-    if (self.has_database_): n += 2 + self.lengthString(len(self.database_))
+    if (self.has_database_id_): n += 2 + self.lengthString(len(self.database_id_))
     return n + 2
 
   def ByteSizePartial(self):
@@ -1878,14 +1878,14 @@ class Reference(ProtocolBuffer.ProtocolMessage):
     if (self.has_path_):
       n += 1
       n += self.lengthString(self.path_.ByteSizePartial())
-    if (self.has_database_): n += 2 + self.lengthString(len(self.database_))
+    if (self.has_database_id_): n += 2 + self.lengthString(len(self.database_id_))
     return n
 
   def Clear(self):
     self.clear_app()
     self.clear_name_space()
     self.clear_path()
-    self.clear_database()
+    self.clear_database_id()
 
   def OutputUnchecked(self, out):
     out.putVarInt32(106)
@@ -1896,9 +1896,9 @@ class Reference(ProtocolBuffer.ProtocolMessage):
     if (self.has_name_space_):
       out.putVarInt32(162)
       out.putPrefixedString(self.name_space_)
-    if (self.has_database_):
+    if (self.has_database_id_):
       out.putVarInt32(186)
-      out.putPrefixedString(self.database_)
+      out.putPrefixedString(self.database_id_)
 
   def OutputPartial(self, out):
     if (self.has_app_):
@@ -1911,9 +1911,9 @@ class Reference(ProtocolBuffer.ProtocolMessage):
     if (self.has_name_space_):
       out.putVarInt32(162)
       out.putPrefixedString(self.name_space_)
-    if (self.has_database_):
+    if (self.has_database_id_):
       out.putVarInt32(186)
-      out.putPrefixedString(self.database_)
+      out.putPrefixedString(self.database_id_)
 
   def TryMerge(self, d):
     while d.avail() > 0:
@@ -1931,7 +1931,7 @@ class Reference(ProtocolBuffer.ProtocolMessage):
         self.set_name_space(d.getPrefixedString())
         continue
       if tt == 186:
-        self.set_database(d.getPrefixedString())
+        self.set_database_id(d.getPrefixedString())
         continue
 
 
@@ -1947,7 +1947,7 @@ class Reference(ProtocolBuffer.ProtocolMessage):
       res+=prefix+"path <\n"
       res+=self.path_.__str__(prefix + "  ", printElemNumber)
       res+=prefix+">\n"
-    if self.has_database_: res+=prefix+("database: %s\n" % self.DebugFormatString(self.database_))
+    if self.has_database_id_: res+=prefix+("database_id: %s\n" % self.DebugFormatString(self.database_id_))
     return res
 
 
@@ -1957,14 +1957,14 @@ class Reference(ProtocolBuffer.ProtocolMessage):
   kapp = 13
   kname_space = 20
   kpath = 14
-  kdatabase = 23
+  kdatabase_id = 23
 
   _TEXT = _BuildTagLookupTable({
     0: "ErrorCode",
     13: "app",
     14: "path",
     20: "name_space",
-    23: "database",
+    23: "database_id",
   }, 23)
 
   _TYPES = _BuildTagLookupTable({
@@ -3127,6 +3127,8 @@ class Index(ProtocolBuffer.ProtocolMessage):
   entity_type_ = ""
   has_ancestor_ = 0
   ancestor_ = 0
+  has_parent_ = 0
+  parent_ = 0
 
   def __init__(self, contents=None):
     self.property_ = []
@@ -3158,6 +3160,19 @@ class Index(ProtocolBuffer.ProtocolMessage):
 
   def has_ancestor(self): return self.has_ancestor_
 
+  def parent(self): return self.parent_
+
+  def set_parent(self, x):
+    self.has_parent_ = 1
+    self.parent_ = x
+
+  def clear_parent(self):
+    if self.has_parent_:
+      self.has_parent_ = 0
+      self.parent_ = 0
+
+  def has_parent(self): return self.has_parent_
+
   def property_size(self): return len(self.property_)
   def property_list(self): return self.property_
 
@@ -3179,6 +3194,7 @@ class Index(ProtocolBuffer.ProtocolMessage):
     assert x is not self
     if (x.has_entity_type()): self.set_entity_type(x.entity_type())
     if (x.has_ancestor()): self.set_ancestor(x.ancestor())
+    if (x.has_parent()): self.set_parent(x.parent())
     for i in xrange(x.property_size()): self.add_property().CopyFrom(x.property(i))
 
   def Equals(self, x):
@@ -3187,6 +3203,8 @@ class Index(ProtocolBuffer.ProtocolMessage):
     if self.has_entity_type_ and self.entity_type_ != x.entity_type_: return 0
     if self.has_ancestor_ != x.has_ancestor_: return 0
     if self.has_ancestor_ and self.ancestor_ != x.ancestor_: return 0
+    if self.has_parent_ != x.has_parent_: return 0
+    if self.has_parent_ and self.parent_ != x.parent_: return 0
     if len(self.property_) != len(x.property_): return 0
     for e1, e2 in zip(self.property_, x.property_):
       if e1 != e2: return 0
@@ -3209,6 +3227,7 @@ class Index(ProtocolBuffer.ProtocolMessage):
   def ByteSize(self):
     n = 0
     n += self.lengthString(len(self.entity_type_))
+    if (self.has_parent_): n += 2
     n += 2 * len(self.property_)
     for i in xrange(len(self.property_)): n += self.property_[i].ByteSize()
     return n + 3
@@ -3220,6 +3239,7 @@ class Index(ProtocolBuffer.ProtocolMessage):
       n += self.lengthString(len(self.entity_type_))
     if (self.has_ancestor_):
       n += 2
+    if (self.has_parent_): n += 2
     n += 2 * len(self.property_)
     for i in xrange(len(self.property_)): n += self.property_[i].ByteSizePartial()
     return n
@@ -3227,6 +3247,7 @@ class Index(ProtocolBuffer.ProtocolMessage):
   def Clear(self):
     self.clear_entity_type()
     self.clear_ancestor()
+    self.clear_parent()
     self.clear_property()
 
   def OutputUnchecked(self, out):
@@ -3238,6 +3259,9 @@ class Index(ProtocolBuffer.ProtocolMessage):
       out.putVarInt32(20)
     out.putVarInt32(40)
     out.putBoolean(self.ancestor_)
+    if (self.has_parent_):
+      out.putVarInt32(56)
+      out.putBoolean(self.parent_)
 
   def OutputPartial(self, out):
     if (self.has_entity_type_):
@@ -3250,6 +3274,9 @@ class Index(ProtocolBuffer.ProtocolMessage):
     if (self.has_ancestor_):
       out.putVarInt32(40)
       out.putBoolean(self.ancestor_)
+    if (self.has_parent_):
+      out.putVarInt32(56)
+      out.putBoolean(self.parent_)
 
   def TryMerge(self, d):
     while d.avail() > 0:
@@ -3263,6 +3290,9 @@ class Index(ProtocolBuffer.ProtocolMessage):
       if tt == 40:
         self.set_ancestor(d.getBoolean())
         continue
+      if tt == 56:
+        self.set_parent(d.getBoolean())
+        continue
 
 
       if (tt == 0): raise ProtocolBuffer.ProtocolBufferDecodeError
@@ -3273,6 +3303,7 @@ class Index(ProtocolBuffer.ProtocolMessage):
     res=""
     if self.has_entity_type_: res+=prefix+("entity_type: %s\n" % self.DebugFormatString(self.entity_type_))
     if self.has_ancestor_: res+=prefix+("ancestor: %s\n" % self.DebugFormatBool(self.ancestor_))
+    if self.has_parent_: res+=prefix+("parent: %s\n" % self.DebugFormatBool(self.parent_))
     cnt=0
     for e in self.property_:
       elm=""
@@ -3289,6 +3320,7 @@ class Index(ProtocolBuffer.ProtocolMessage):
 
   kentity_type = 1
   kancestor = 5
+  kparent = 7
   kPropertyGroup = 2
   kPropertyname = 3
   kPropertydirection = 4
@@ -3302,7 +3334,8 @@ class Index(ProtocolBuffer.ProtocolMessage):
     4: "direction",
     5: "ancestor",
     6: "mode",
-  }, 6)
+    7: "parent",
+  }, 7)
 
   _TYPES = _BuildTagLookupTable({
     0: ProtocolBuffer.Encoder.NUMERIC,
@@ -3312,7 +3345,8 @@ class Index(ProtocolBuffer.ProtocolMessage):
     4: ProtocolBuffer.Encoder.NUMERIC,
     5: ProtocolBuffer.Encoder.NUMERIC,
     6: ProtocolBuffer.Encoder.NUMERIC,
-  }, 6, ProtocolBuffer.Encoder.MAX_TYPE)
+    7: ProtocolBuffer.Encoder.NUMERIC,
+  }, 7, ProtocolBuffer.Encoder.MAX_TYPE)
 
 
   _STYLE = """"""
@@ -3353,8 +3387,8 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
 
   has_app_id_ = 0
   app_id_ = ""
-  has_database_ = 0
-  database_ = ""
+  has_database_id_ = 0
+  database_id_ = ""
   has_id_ = 0
   id_ = 0
   has_definition_ = 0
@@ -3368,12 +3402,12 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
   only_use_if_required_ = 0
   has_disabled_index_ = 0
   disabled_index_ = 0
-  has_write_division_family_ = 0
-  write_division_family_ = ""
+  has_deprecated_write_division_family_ = 0
+  deprecated_write_division_family_ = ""
 
   def __init__(self, contents=None):
     self.definition_ = Index()
-    self.read_division_family_ = []
+    self.deprecated_read_division_family_ = []
     if contents is not None: self.MergeFromString(contents)
 
   def app_id(self): return self.app_id_
@@ -3389,18 +3423,18 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
 
   def has_app_id(self): return self.has_app_id_
 
-  def database(self): return self.database_
+  def database_id(self): return self.database_id_
 
-  def set_database(self, x):
-    self.has_database_ = 1
-    self.database_ = x
+  def set_database_id(self, x):
+    self.has_database_id_ = 1
+    self.database_id_ = x
 
-  def clear_database(self):
-    if self.has_database_:
-      self.has_database_ = 0
-      self.database_ = ""
+  def clear_database_id(self):
+    if self.has_database_id_:
+      self.has_database_id_ = 0
+      self.database_id_ = ""
 
-  def has_database(self): return self.has_database_
+  def has_database_id(self): return self.has_database_id_
 
   def id(self): return self.id_
 
@@ -3488,39 +3522,39 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
 
   def has_disabled_index(self): return self.has_disabled_index_
 
-  def read_division_family_size(self): return len(self.read_division_family_)
-  def read_division_family_list(self): return self.read_division_family_
+  def deprecated_read_division_family_size(self): return len(self.deprecated_read_division_family_)
+  def deprecated_read_division_family_list(self): return self.deprecated_read_division_family_
 
-  def read_division_family(self, i):
-    return self.read_division_family_[i]
+  def deprecated_read_division_family(self, i):
+    return self.deprecated_read_division_family_[i]
 
-  def set_read_division_family(self, i, x):
-    self.read_division_family_[i] = x
+  def set_deprecated_read_division_family(self, i, x):
+    self.deprecated_read_division_family_[i] = x
 
-  def add_read_division_family(self, x):
-    self.read_division_family_.append(x)
+  def add_deprecated_read_division_family(self, x):
+    self.deprecated_read_division_family_.append(x)
 
-  def clear_read_division_family(self):
-    self.read_division_family_ = []
+  def clear_deprecated_read_division_family(self):
+    self.deprecated_read_division_family_ = []
 
-  def write_division_family(self): return self.write_division_family_
+  def deprecated_write_division_family(self): return self.deprecated_write_division_family_
 
-  def set_write_division_family(self, x):
-    self.has_write_division_family_ = 1
-    self.write_division_family_ = x
+  def set_deprecated_write_division_family(self, x):
+    self.has_deprecated_write_division_family_ = 1
+    self.deprecated_write_division_family_ = x
 
-  def clear_write_division_family(self):
-    if self.has_write_division_family_:
-      self.has_write_division_family_ = 0
-      self.write_division_family_ = ""
+  def clear_deprecated_write_division_family(self):
+    if self.has_deprecated_write_division_family_:
+      self.has_deprecated_write_division_family_ = 0
+      self.deprecated_write_division_family_ = ""
 
-  def has_write_division_family(self): return self.has_write_division_family_
+  def has_deprecated_write_division_family(self): return self.has_deprecated_write_division_family_
 
 
   def MergeFrom(self, x):
     assert x is not self
     if (x.has_app_id()): self.set_app_id(x.app_id())
-    if (x.has_database()): self.set_database(x.database())
+    if (x.has_database_id()): self.set_database_id(x.database_id())
     if (x.has_id()): self.set_id(x.id())
     if (x.has_definition()): self.mutable_definition().MergeFrom(x.definition())
     if (x.has_state()): self.set_state(x.state())
@@ -3528,15 +3562,15 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     if (x.has_error_message()): self.set_error_message(x.error_message())
     if (x.has_only_use_if_required()): self.set_only_use_if_required(x.only_use_if_required())
     if (x.has_disabled_index()): self.set_disabled_index(x.disabled_index())
-    for i in xrange(x.read_division_family_size()): self.add_read_division_family(x.read_division_family(i))
-    if (x.has_write_division_family()): self.set_write_division_family(x.write_division_family())
+    for i in xrange(x.deprecated_read_division_family_size()): self.add_deprecated_read_division_family(x.deprecated_read_division_family(i))
+    if (x.has_deprecated_write_division_family()): self.set_deprecated_write_division_family(x.deprecated_write_division_family())
 
   def Equals(self, x):
     if x is self: return 1
     if self.has_app_id_ != x.has_app_id_: return 0
     if self.has_app_id_ and self.app_id_ != x.app_id_: return 0
-    if self.has_database_ != x.has_database_: return 0
-    if self.has_database_ and self.database_ != x.database_: return 0
+    if self.has_database_id_ != x.has_database_id_: return 0
+    if self.has_database_id_ and self.database_id_ != x.database_id_: return 0
     if self.has_id_ != x.has_id_: return 0
     if self.has_id_ and self.id_ != x.id_: return 0
     if self.has_definition_ != x.has_definition_: return 0
@@ -3551,11 +3585,11 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     if self.has_only_use_if_required_ and self.only_use_if_required_ != x.only_use_if_required_: return 0
     if self.has_disabled_index_ != x.has_disabled_index_: return 0
     if self.has_disabled_index_ and self.disabled_index_ != x.disabled_index_: return 0
-    if len(self.read_division_family_) != len(x.read_division_family_): return 0
-    for e1, e2 in zip(self.read_division_family_, x.read_division_family_):
+    if len(self.deprecated_read_division_family_) != len(x.deprecated_read_division_family_): return 0
+    for e1, e2 in zip(self.deprecated_read_division_family_, x.deprecated_read_division_family_):
       if e1 != e2: return 0
-    if self.has_write_division_family_ != x.has_write_division_family_: return 0
-    if self.has_write_division_family_ and self.write_division_family_ != x.write_division_family_: return 0
+    if self.has_deprecated_write_division_family_ != x.has_deprecated_write_division_family_: return 0
+    if self.has_deprecated_write_division_family_ and self.deprecated_write_division_family_ != x.deprecated_write_division_family_: return 0
     return 1
 
   def IsInitialized(self, debug_strs=None):
@@ -3582,7 +3616,7 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
   def ByteSize(self):
     n = 0
     n += self.lengthString(len(self.app_id_))
-    if (self.has_database_): n += 1 + self.lengthString(len(self.database_))
+    if (self.has_database_id_): n += 1 + self.lengthString(len(self.database_id_))
     n += self.lengthVarInt64(self.id_)
     n += self.lengthString(self.definition_.ByteSize())
     n += self.lengthVarInt64(self.state_)
@@ -3590,9 +3624,9 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     if (self.has_error_message_): n += 1 + self.lengthString(len(self.error_message_))
     if (self.has_only_use_if_required_): n += 2
     if (self.has_disabled_index_): n += 2
-    n += 1 * len(self.read_division_family_)
-    for i in xrange(len(self.read_division_family_)): n += self.lengthString(len(self.read_division_family_[i]))
-    if (self.has_write_division_family_): n += 1 + self.lengthString(len(self.write_division_family_))
+    n += 1 * len(self.deprecated_read_division_family_)
+    for i in xrange(len(self.deprecated_read_division_family_)): n += self.lengthString(len(self.deprecated_read_division_family_[i]))
+    if (self.has_deprecated_write_division_family_): n += 1 + self.lengthString(len(self.deprecated_write_division_family_))
     return n + 4
 
   def ByteSizePartial(self):
@@ -3600,7 +3634,7 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     if (self.has_app_id_):
       n += 1
       n += self.lengthString(len(self.app_id_))
-    if (self.has_database_): n += 1 + self.lengthString(len(self.database_))
+    if (self.has_database_id_): n += 1 + self.lengthString(len(self.database_id_))
     if (self.has_id_):
       n += 1
       n += self.lengthVarInt64(self.id_)
@@ -3614,14 +3648,14 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     if (self.has_error_message_): n += 1 + self.lengthString(len(self.error_message_))
     if (self.has_only_use_if_required_): n += 2
     if (self.has_disabled_index_): n += 2
-    n += 1 * len(self.read_division_family_)
-    for i in xrange(len(self.read_division_family_)): n += self.lengthString(len(self.read_division_family_[i]))
-    if (self.has_write_division_family_): n += 1 + self.lengthString(len(self.write_division_family_))
+    n += 1 * len(self.deprecated_read_division_family_)
+    for i in xrange(len(self.deprecated_read_division_family_)): n += self.lengthString(len(self.deprecated_read_division_family_[i]))
+    if (self.has_deprecated_write_division_family_): n += 1 + self.lengthString(len(self.deprecated_write_division_family_))
     return n
 
   def Clear(self):
     self.clear_app_id()
-    self.clear_database()
+    self.clear_database_id()
     self.clear_id()
     self.clear_definition()
     self.clear_state()
@@ -3629,8 +3663,8 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     self.clear_error_message()
     self.clear_only_use_if_required()
     self.clear_disabled_index()
-    self.clear_read_division_family()
-    self.clear_write_division_family()
+    self.clear_deprecated_read_division_family()
+    self.clear_deprecated_write_division_family()
 
   def OutputUnchecked(self, out):
     out.putVarInt32(10)
@@ -3645,12 +3679,12 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     if (self.has_only_use_if_required_):
       out.putVarInt32(48)
       out.putBoolean(self.only_use_if_required_)
-    for i in xrange(len(self.read_division_family_)):
+    for i in xrange(len(self.deprecated_read_division_family_)):
       out.putVarInt32(58)
-      out.putPrefixedString(self.read_division_family_[i])
-    if (self.has_write_division_family_):
+      out.putPrefixedString(self.deprecated_read_division_family_[i])
+    if (self.has_deprecated_write_division_family_):
       out.putVarInt32(66)
-      out.putPrefixedString(self.write_division_family_)
+      out.putPrefixedString(self.deprecated_write_division_family_)
     if (self.has_disabled_index_):
       out.putVarInt32(72)
       out.putBoolean(self.disabled_index_)
@@ -3660,9 +3694,9 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     if (self.has_error_message_):
       out.putVarInt32(90)
       out.putPrefixedString(self.error_message_)
-    if (self.has_database_):
+    if (self.has_database_id_):
       out.putVarInt32(98)
-      out.putPrefixedString(self.database_)
+      out.putPrefixedString(self.database_id_)
 
   def OutputPartial(self, out):
     if (self.has_app_id_):
@@ -3681,12 +3715,12 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     if (self.has_only_use_if_required_):
       out.putVarInt32(48)
       out.putBoolean(self.only_use_if_required_)
-    for i in xrange(len(self.read_division_family_)):
+    for i in xrange(len(self.deprecated_read_division_family_)):
       out.putVarInt32(58)
-      out.putPrefixedString(self.read_division_family_[i])
-    if (self.has_write_division_family_):
+      out.putPrefixedString(self.deprecated_read_division_family_[i])
+    if (self.has_deprecated_write_division_family_):
       out.putVarInt32(66)
-      out.putPrefixedString(self.write_division_family_)
+      out.putPrefixedString(self.deprecated_write_division_family_)
     if (self.has_disabled_index_):
       out.putVarInt32(72)
       out.putBoolean(self.disabled_index_)
@@ -3696,9 +3730,9 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     if (self.has_error_message_):
       out.putVarInt32(90)
       out.putPrefixedString(self.error_message_)
-    if (self.has_database_):
+    if (self.has_database_id_):
       out.putVarInt32(98)
-      out.putPrefixedString(self.database_)
+      out.putPrefixedString(self.database_id_)
 
   def TryMerge(self, d):
     while d.avail() > 0:
@@ -3722,10 +3756,10 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
         self.set_only_use_if_required(d.getBoolean())
         continue
       if tt == 58:
-        self.add_read_division_family(d.getPrefixedString())
+        self.add_deprecated_read_division_family(d.getPrefixedString())
         continue
       if tt == 66:
-        self.set_write_division_family(d.getPrefixedString())
+        self.set_deprecated_write_division_family(d.getPrefixedString())
         continue
       if tt == 72:
         self.set_disabled_index(d.getBoolean())
@@ -3737,7 +3771,7 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
         self.set_error_message(d.getPrefixedString())
         continue
       if tt == 98:
-        self.set_database(d.getPrefixedString())
+        self.set_database_id(d.getPrefixedString())
         continue
 
 
@@ -3748,7 +3782,7 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
   def __str__(self, prefix="", printElemNumber=0):
     res=""
     if self.has_app_id_: res+=prefix+("app_id: %s\n" % self.DebugFormatString(self.app_id_))
-    if self.has_database_: res+=prefix+("database: %s\n" % self.DebugFormatString(self.database_))
+    if self.has_database_id_: res+=prefix+("database_id: %s\n" % self.DebugFormatString(self.database_id_))
     if self.has_id_: res+=prefix+("id: %s\n" % self.DebugFormatInt64(self.id_))
     if self.has_definition_:
       res+=prefix+"definition <\n"
@@ -3760,12 +3794,12 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     if self.has_only_use_if_required_: res+=prefix+("only_use_if_required: %s\n" % self.DebugFormatBool(self.only_use_if_required_))
     if self.has_disabled_index_: res+=prefix+("disabled_index: %s\n" % self.DebugFormatBool(self.disabled_index_))
     cnt=0
-    for e in self.read_division_family_:
+    for e in self.deprecated_read_division_family_:
       elm=""
       if printElemNumber: elm="(%d)" % cnt
-      res+=prefix+("read_division_family%s: %s\n" % (elm, self.DebugFormatString(e)))
+      res+=prefix+("deprecated_read_division_family%s: %s\n" % (elm, self.DebugFormatString(e)))
       cnt+=1
-    if self.has_write_division_family_: res+=prefix+("write_division_family: %s\n" % self.DebugFormatString(self.write_division_family_))
+    if self.has_deprecated_write_division_family_: res+=prefix+("deprecated_write_division_family: %s\n" % self.DebugFormatString(self.deprecated_write_division_family_))
     return res
 
 
@@ -3773,7 +3807,7 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     return tuple([sparse.get(i, default) for i in xrange(0, 1+maxtag)])
 
   kapp_id = 1
-  kdatabase = 12
+  kdatabase_id = 12
   kid = 2
   kdefinition = 3
   kstate = 4
@@ -3781,8 +3815,8 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
   kerror_message = 11
   konly_use_if_required = 6
   kdisabled_index = 9
-  kread_division_family = 7
-  kwrite_division_family = 8
+  kdeprecated_read_division_family = 7
+  kdeprecated_write_division_family = 8
 
   _TEXT = _BuildTagLookupTable({
     0: "ErrorCode",
@@ -3791,12 +3825,12 @@ class CompositeIndex(ProtocolBuffer.ProtocolMessage):
     3: "definition",
     4: "state",
     6: "only_use_if_required",
-    7: "read_division_family",
-    8: "write_division_family",
+    7: "deprecated_read_division_family",
+    8: "deprecated_write_division_family",
     9: "disabled_index",
     10: "workflow_state",
     11: "error_message",
-    12: "database",
+    12: "database_id",
   }, 12)
 
   _TYPES = _BuildTagLookupTable({
